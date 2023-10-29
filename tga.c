@@ -25,6 +25,7 @@
 #include "tga.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #define TGA_TYPE_NO_IMAGE       0
 #define TGA_TYPE_MAPPED         1
@@ -39,21 +40,6 @@ static void swap_byte(byte *a, byte *b)
     byte temp = *a;
     *a = *b;
     *b = temp;
-}
-
-static bool compare_bytes(byte *a, byte *b, int length)
-{
-    for (int i = 0; i < length; i++)
-        if (a[i] != b[i])
-            return false;
-
-    return true;
-}
-
-static void copy_bytes(byte *origin, byte *dest, int length)
-{
-    for (int i = 0; i < length; i++)
-        dest[i] = origin[i];
 }
 
 static rgb_bgr_convert(byte *origin, byte *dest, int channels)
@@ -528,7 +514,7 @@ bool write_tga(const char *filename, tga_image *ptga, tga_type type)
 
             for (unsigned int j = 0, color = 0; j < palette_size * ptga->channels; j += ptga->channels, color++)
             {
-                if (!compare_bytes(&ptga->data[i], &palette_data[j], ptga->channels))
+                if (memcmp(&ptga->data[i], &palette_data[j], ptga->channels) != 0)
                     continue;
 
                 color_data[pixel] = color;
@@ -538,7 +524,7 @@ bool write_tga(const char *filename, tga_image *ptga, tga_type type)
 
             if (!found)
             {
-                copy_bytes(&ptga->data[i], &palette_data[palette_size * ptga->channels], ptga->channels);
+                memcpy(&palette_data[palette_size * ptga->channels], &ptga->data[i], ptga->channels);
                 color_data[pixel] = palette_size;
                 palette_size++;
             }
@@ -730,7 +716,7 @@ bool write_tga(const char *filename, tga_image *ptga, tga_type type)
                     // A packet cannot contain more than 128 pixels
                     if (j + 1 < ptga->width && duplicates + 1 < 128)
                     {
-                        if (compare_bytes(&ptga->data[index], &ptga->data[index + ptga->channels], ptga->channels))
+                        if (memcmp(&ptga->data[index], &ptga->data[index + ptga->channels], ptga->channels) == 0)
                         {
                             duplicates++;
                             continue;
@@ -761,7 +747,7 @@ bool write_tga(const char *filename, tga_image *ptga, tga_type type)
                     // A packet cannot contain more than 128 pixels
                     if (different + 1 < 128 && j + 1 < ptga->width)
                     {
-                        if (!compare_bytes(&ptga->data[index], &ptga->data[index + ptga->channels], ptga->channels))
+                        if (memcmp(&ptga->data[index], &ptga->data[index + ptga->channels], ptga->channels) != 0)
                         {
                             different++;
                             continue;
@@ -809,7 +795,7 @@ bool write_tga(const char *filename, tga_image *ptga, tga_type type)
                     // A packet cannot contain more than 128 pixels
                     if (j + 1 < ptga->width && duplicates + 1 < 128)
                     {
-                        if (compare_bytes(&ptga->data[index], &ptga->data[index + ptga->channels], ptga->channels))
+                        if (memcmp(&ptga->data[index], &ptga->data[index + ptga->channels], ptga->channels) == 0)
                         {
                             duplicates++;
                             continue;
@@ -840,7 +826,7 @@ bool write_tga(const char *filename, tga_image *ptga, tga_type type)
                     // A packet cannot contain more than 128 pixels
                     if (different + 1 < 128 && j + 1 < ptga->width)
                     {
-                        if (!compare_bytes(&ptga->data[index], &ptga->data[index + ptga->channels], ptga->channels))
+                        if (memcmp(&ptga->data[index], &ptga->data[index + ptga->channels], ptga->channels) != 0)
                         {
                             different++;
                             continue;
