@@ -41,7 +41,45 @@ static void swap_byte(byte *a, byte *b)
     *b = temp;
 }
 
-static void rgb2bw(byte *data, word *pixel, int channels)
+static rgb_bgr_convert(byte *origin, byte *dest, int channels)
+{
+    // Do not reorder the following code below as the order is very important
+
+    // Alpha
+    if (channels == 4)
+        dest[3] = origin[3];
+
+    dest[2] = origin[0];    // B
+    dest[1] = origin[1];    // G
+    dest[0] = origin[2];    // R
+}
+
+static rgb_to_pixel(byte *data, word *pixel, int channels)
+{
+    *pixel = 0;
+    *pixel |= (data[0] >> 3) << 10;     // R
+    *pixel |= (data[1] >> 3) << 5;      // G
+    *pixel |= (data[2] >> 3);           // B
+
+    // Alpha
+    if (channels == 4)
+        *pixel |= data[3] ? 1 << 15 : 0 << 15;
+    else
+        *pixel |= 1 << 15;
+}
+
+static pixel_to_rgb(word pixel, byte *data, int channels)
+{
+    data[0] = ((pixel >> 10) & 0x1f) << 3;      // R
+    data[1] = ((pixel >> 5) & 0x1f) << 3;       // G
+    data[2] = (pixel & 0x1f) << 3;              // B
+
+    // Alpha
+    if (channels == 4)
+        data[3] = pixel & 0x8000 ? 255 : 0;
+}
+
+static void rgb_to_bw(byte *data, word *pixel, int channels)
 {
     *pixel = (data[0] + data[1] + data[2]) / 3;
 
@@ -52,7 +90,7 @@ static void rgb2bw(byte *data, word *pixel, int channels)
         *pixel |= 255 << 8;
 }
 
-static void bw2rgb(word *pixel, byte *data, int channels)
+static void bw_to_rgb(word *pixel, byte *data, int channels)
 {
     // Do not reorder the following code below as the order is very important
 
@@ -169,18 +207,7 @@ bool load_tga2(const char *filename, tga_image *ptga, tga_filefunc_def *ptga_fil
             ptga_filefunc_def->read_file(ptga->data, sizeof(byte), width * height, file);
 
             for (int i = width * height - 1; i >= 0; i--)
-            {
-                // Do not reorder the following code below as the order is very important
-
-                if (channels == 4)
-                {
-                    ptga->data[i * channels + 3] = color_data[ptga->data[i] * color_channels + 3];
-                }
-
-                ptga->data[i * channels + 2] = color_data[ptga->data[i] * color_channels + 0]; // B
-                ptga->data[i * channels + 1] = color_data[ptga->data[i] * color_channels + 1]; // G
-                ptga->data[i * channels + 0] = color_data[ptga->data[i] * color_channels + 2]; // R
-            }
+                rgb_bgr_convert(&color_data[ptga->data[i] * color_channels], &ptga->data[i * channels], channels);
 
             success = true;
         }
@@ -219,15 +246,7 @@ bool load_tga2(const char *filename, tga_image *ptga, tga_filefunc_def *ptga_fil
                 word pixel = (word)ptga->data[i * sizeof(word) + 1] << 8 |
                              (word)ptga->data[i * sizeof(word)];
 
-                ptga->data[i * channels + 0] = ((pixel >> 10) & 0x1f) << 3;     // R
-                ptga->data[i * channels + 1] = ((pixel >> 5) & 0x1f) << 3;      // G
-                ptga->data[i * channels + 2] = (pixel & 0x1f) << 3;             // B
-
-                // Alpha
-                if (channels == 4)
-                {
-                    ptga->data[i * channels + 3] = pixel & 0x8000 ? 255 : 0;
-                }
+                pixel_to_rgb(pixel, &ptga->data[i * channels], channels);
             }
 
             success = true;
@@ -243,7 +262,7 @@ bool load_tga2(const char *filename, tga_image *ptga, tga_filefunc_def *ptga_fil
             ptga_filefunc_def->read_file(ptga->data, sizeof(byte), width * height * sizeof(word), file);
 
             for (int i = width * height - 1; i >= 0; i--)
-                bw2rgb((word *)&ptga->data[i * sizeof(word)], &ptga->data[i * channels], channels);
+                bw_to_rgb((word *)&ptga->data[i * sizeof(word)], &ptga->data[i * channels], channels);
 
             success = true;
         }
@@ -271,15 +290,7 @@ bool load_tga2(const char *filename, tga_image *ptga, tga_filefunc_def *ptga_fil
 
                     while (rle_id)
                     {
-                        // Alpha
-                        if (channels == 4)
-                        {
-                            ptga->data[i * channels + 3] = color_data[pixel * color_channels + 3];
-                        }
-
-                        ptga->data[i * channels + 2] = color_data[pixel * color_channels + 0]; // B
-                        ptga->data[i * channels + 1] = color_data[pixel * color_channels + 1]; // G
-                        ptga->data[i * channels + 0] = color_data[pixel * color_channels + 2]; // R
+                        rgb_bgr_convert(&color_data[pixel * color_channels], &ptga->data[i * channels], channels);
 
                         i++;
                         rle_id--;
@@ -292,18 +303,7 @@ bool load_tga2(const char *filename, tga_image *ptga, tga_filefunc_def *ptga_fil
                     ptga_filefunc_def->read_file(&ptga->data[i * channels], sizeof(byte), rle_id, file);
 
                     for (int j = rle_id - 1; j >= 0; j--)
-                    {
-                        // Alpha
-                        if (channels == 4)
-                        {
-                            ptga->data[(i + j) * channels + 3] = color_data[ptga->data[i * channels + j] * color_channels + 3];
-                        }
-
-                        // Colors
-                        ptga->data[(i + j) * channels + 2] = color_data[ptga->data[i * channels + j] * color_channels + 0]; // B
-                        ptga->data[(i + j) * channels + 1] = color_data[ptga->data[i * channels + j] * color_channels + 1]; // G
-                        ptga->data[(i + j) * channels + 0] = color_data[ptga->data[i * channels + j] * color_channels + 2]; // R
-                    }
+                        rgb_bgr_convert(&color_data[ptga->data[i * channels + j] * color_channels], &ptga->data[(i + j) * channels], channels);
 
                     i += rle_id;
                 }
@@ -335,14 +335,7 @@ bool load_tga2(const char *filename, tga_image *ptga, tga_filefunc_def *ptga_fil
 
                     while (rle_id)
                     {
-                        ptga->data[i * channels + 0] = colors[2];
-                        ptga->data[i * channels + 1] = colors[1];
-                        ptga->data[i * channels + 2] = colors[0];
-
-                        if (bits_per_pixel == 32)
-                        {
-                            ptga->data[i * channels + 3] = colors[3];
-                        }
+                        rgb_bgr_convert(&colors[0], &ptga->data[i * channels], channels);
 
                         i++;
                         rle_id--;
@@ -388,23 +381,7 @@ bool load_tga2(const char *filename, tga_image *ptga, tga_filefunc_def *ptga_fil
 
                     while (rle_id)
                     {
-                        // R
-                        ptga->data[i * channels + 0] = ((pixel >> 10) & 0x1f) << 3;
-                        ptga->data[i * channels + 0] += ptga->data[i * channels + 0] >> 5;
-
-                        // G
-                        ptga->data[i * channels + 1] = ((pixel >> 5) & 0x1f) << 3;
-                        ptga->data[i * channels + 1] += ptga->data[i * channels + 1] >> 5;
-
-                        // B
-                        ptga->data[i * channels + 2] = (pixel & 0x1f) << 3;
-                        ptga->data[i * channels + 2] += ptga->data[i * channels + 2] >> 5;
-
-                        // Alpha
-                        if (channels == 4)
-                        {
-                            ptga->data[i * channels + 3] = pixel & 0x8000 ? 0xff : 0;
-                        }
+                        pixel_to_rgb(pixel, &ptga->data[i * channels], channels);
 
                         i++;
                         rle_id--;
@@ -421,23 +398,7 @@ bool load_tga2(const char *filename, tga_image *ptga, tga_filefunc_def *ptga_fil
                         word pixel = (word)ptga->data[i * channels + j * sizeof(word) + 1] << 8 |
                                      (word)ptga->data[i * channels + j * sizeof(word)];
 
-                        // R
-                        ptga->data[(i + j) * channels + 0] = ((pixel >> 10) & 0x1f) << 3;
-                        ptga->data[(i + j) * channels + 0] += ptga->data[(i + j) * channels + 0] >> 5;
-
-                        // G
-                        ptga->data[(i + j) * channels + 1] = ((pixel >> 5) & 0x1f) << 3;
-                        ptga->data[(i + j) * channels + 1] += ptga->data[(i + j) * channels + 1] >> 5;
-
-                        // B
-                        ptga->data[(i + j) * channels + 2] = (pixel & 0x1f) << 3;
-                        ptga->data[(i + j) * channels + 2] += ptga->data[(i + j) * channels + 2] >> 5;
-
-                        // Alpha
-                        if (channels == 4)
-                        {
-                            ptga->data[(i + j) * channels + 3] = pixel & 0x8000 ? 0xff : 0;
-                        }
+                        pixel_to_rgb(pixel, &ptga->data[(i + j) * channels], channels);
                     }
 
                     i += rle_id;
@@ -470,7 +431,8 @@ bool load_tga2(const char *filename, tga_image *ptga, tga_filefunc_def *ptga_fil
 
                     while (rle_id)
                     {
-                        bw2rgb(&pixel, &ptga->data[i * channels], channels);
+                        bw_to_rgb(&pixel, &ptga->data[i * channels], channels);
+
                         i++;
                         rle_id--;
                     }
@@ -482,9 +444,7 @@ bool load_tga2(const char *filename, tga_image *ptga, tga_filefunc_def *ptga_fil
                     ptga_filefunc_def->read_file(&ptga->data[i * channels], sizeof(byte), rle_id * sizeof(word), file);
 
                     for (int j = rle_id - 1; j >= 0; j--)
-                    {
-                        bw2rgb((word *)&ptga->data[i * channels + j * sizeof(word)], &ptga->data[(i + j) * channels], channels);
-                    }
+                        bw_to_rgb((word *)&ptga->data[i * channels + j * sizeof(word)], &ptga->data[(i + j) * channels], channels);
 
                     i += rle_id;
                 }
@@ -571,16 +531,7 @@ bool write_tga(const char *filename, tga_image *ptga, tga_type type)
 
             if (!found)
             {
-                palette_data[colors * ptga->channels + 2] = ptga->data[i + 0]; // R
-                palette_data[colors * ptga->channels + 1] = ptga->data[i + 1]; // G
-                palette_data[colors * ptga->channels + 0] = ptga->data[i + 2]; // B
-
-                // Alpha
-                if (ptga->channels == 4)
-                {
-                    palette_data[colors * ptga->channels + 3] = ptga->data[i + 3];
-                }
-
+                rgb_bgr_convert(&ptga->data[i], &palette_data[colors * ptga->channels], ptga->channels);
                 color_data[pixel] = colors;
                 colors++;
             }
@@ -653,36 +604,17 @@ bool write_tga(const char *filename, tga_image *ptga, tga_type type)
     {
         for (int i = 0; i < size; i += ptga->channels)
         {
-            unsigned char pixel[4];
-
-            pixel[0] = ptga->data[i + 2];
-            pixel[1] = ptga->data[i + 1];
-            pixel[2] = ptga->data[i + 0];
-
-            if (ptga->channels == 4)
-            {
-                pixel[3] = ptga->data[i + 3];
-            }
-
-            fwrite(pixel, sizeof(byte), ptga->channels, file);
+            unsigned char colors[4];
+            rgb_bgr_convert(&ptga->data[i], &colors[0], ptga->channels);
+            fwrite(colors, sizeof(byte), ptga->channels, file);
         }
     }
     else if (type == TGA_RGB16)
     {
         for (int i = 0; i < size; i += ptga->channels)
         {
-            word pixel = 0;
-
-            pixel |= (ptga->data[i + 0] >> 3) << 10;    // R
-            pixel |= (ptga->data[i + 1] >> 3) << 5;     // G
-            pixel |= (ptga->data[i + 2] >> 3);          // B
-
-            // Alpha
-            if (ptga->channels == 4)
-                pixel |= ptga->data[i + 3] ? 1 << 15 : 0 << 15;
-            else
-                pixel |= 1 << 15;
-
+            word pixel;
+            rgb_to_pixel(&ptga->data[i], &pixel, ptga->channels);
             fwrite(&pixel, sizeof(word), 1, file);
         }
     }
@@ -691,7 +623,7 @@ bool write_tga(const char *filename, tga_image *ptga, tga_type type)
         for (int i = 0; i < size; i += ptga->channels)
         {
             word pixel;
-            rgb2bw(&ptga->data[i], &pixel, ptga->channels);
+            rgb_to_bw(&ptga->data[i], &pixel, ptga->channels);
             fwrite(&pixel, sizeof(pixel), 1, file);
         }
     }
@@ -817,17 +749,11 @@ bool write_tga(const char *filename, tga_image *ptga, tga_type type)
                     rle_id |= 1 << 7;
                     rle_id--;
 
-                    byte pixel[4];
-
-                    pixel[0] = ptga->data[index + 2];
-                    pixel[1] = ptga->data[index + 1];
-                    pixel[2] = ptga->data[index + 0];
-
-                    if (ptga->channels == 4)
-                        pixel[3] = ptga->data[index + 3];
+                    byte colors[4];
+                    rgb_bgr_convert(&ptga->data[index], &colors[0], ptga->channels);
 
                     fwrite(&rle_id, sizeof(byte), 1, file);
-                    fwrite(&pixel, sizeof(byte), ptga->channels, file);
+                    fwrite(&colors, sizeof(byte), ptga->channels, file);
 
                     duplicates = 0;
                     continue;
@@ -875,16 +801,10 @@ bool write_tga(const char *filename, tga_image *ptga, tga_type type)
 
                 for (int k = 0; k < different + 1; k++)
                 {
-                    byte pixel[4];
+                    byte colors[4];
+                    rgb_bgr_convert(&ptga->data[index - (different - k) * ptga->channels], &colors[0], ptga->channels);
 
-                    pixel[0] = ptga->data[index - (different - k) * ptga->channels + 2];
-                    pixel[1] = ptga->data[index - (different - k) * ptga->channels + 1];
-                    pixel[2] = ptga->data[index - (different - k) * ptga->channels + 0];
-
-                    if (ptga->channels == 4)
-                        pixel[3] = ptga->data[index - (different - k) * ptga->channels + 3];
-
-                    fwrite(&pixel, sizeof(byte), ptga->channels, file);
+                    fwrite(&colors, sizeof(byte), ptga->channels, file);
                 }
 
                 different = 0;
@@ -938,17 +858,8 @@ bool write_tga(const char *filename, tga_image *ptga, tga_type type)
                     rle_id |= 1 << 7;
                     rle_id--;
 
-                    word pixel = 0;
-
-                    pixel |= ptga->data[index + 0] >> 3 << 10;
-                    pixel |= ptga->data[index + 1] >> 3 << 5;
-                    pixel |= ptga->data[index + 2] >> 3;
-
-                    // Alpha
-                    if (ptga->channels == 4)
-                        pixel |= ptga->data[index + 3] ? 0x8000 : 0;
-                    else
-                        pixel |= 1 << 15;
+                    word pixel;
+                    rgb_to_pixel(&ptga->data[index], &pixel, ptga->channels);
 
                     fwrite(&rle_id, sizeof(byte), 1, file);
                     fwrite(&pixel, sizeof(word), 1, file);
@@ -999,18 +910,8 @@ bool write_tga(const char *filename, tga_image *ptga, tga_type type)
 
                 for (int k = 0; k < different + 1; k++)
                 {
-                    word pixel = 0;
-
-                    pixel |= ptga->data[index - (different - k) * ptga->channels + 0] >> 3 << 10;
-                    pixel |= ptga->data[index - (different - k) * ptga->channels + 1] >> 3 << 5;
-                    pixel |= ptga->data[index - (different - k) * ptga->channels + 2] >> 3;
-
-                    // Alpha
-                    if (ptga->channels == 4)
-                        pixel |= ptga->data[index - (different - k) * ptga->channels + 3] ? 0x8000 : 0;
-                    else
-                        pixel |= 1 << 15;
-
+                    word pixel;
+                    rgb_to_pixel(&ptga->data[index - (different - k) * ptga->channels], &pixel, ptga->channels);
                     fwrite(&pixel, sizeof(word), 1, file);
                 }
 
@@ -1028,7 +929,7 @@ bool write_tga(const char *filename, tga_image *ptga, tga_type type)
 
         // Convert RGB image to BW image
         for (int i = 0, j = 0; i < size; i += ptga->channels, j++)
-            rgb2bw(&ptga->data[i], &bw_data[j], ptga->channels);
+            rgb_to_bw(&ptga->data[i], &bw_data[j], ptga->channels);
 
         for (unsigned int i = 0; i < ptga->height; i++)
         {
