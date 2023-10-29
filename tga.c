@@ -41,6 +41,21 @@ static void swap_byte(byte *a, byte *b)
     *b = temp;
 }
 
+static bool compare_bytes(byte *a, byte *b, int length)
+{
+    for (int i = 0; i < length; i++)
+        if (a[i] != b[i])
+            return false;
+
+    return true;
+}
+
+static void copy_bytes(byte *origin, byte *dest, int length)
+{
+    for (int i = 0; i < length; i++)
+        dest[i] = origin[i];
+}
+
 static rgb_bgr_convert(byte *origin, byte *dest, int channels)
 {
     // Do not reorder the following code below as the order is very important
@@ -493,7 +508,7 @@ bool write_tga(const char *filename, tga_image *ptga, tga_type type)
     byte color_map_entry_size = 0;
     byte *palette_data = NULL;
     byte *color_data = NULL;
-    int colors = 0;
+    int palette_size = 0;
 
     if (!filename || !ptga)
         return false;
@@ -511,18 +526,10 @@ bool write_tga(const char *filename, tga_image *ptga, tga_type type)
         {
             bool found = false;
 
-            for (unsigned int j = 0, color = 0; j < colors * ptga->channels; j += ptga->channels, color++)
+            for (unsigned int j = 0, color = 0; j < palette_size * ptga->channels; j += ptga->channels, color++)
             {
-                if (ptga->data[i + 2] != palette_data[j + 0]) continue;
-                if (ptga->data[i + 1] != palette_data[j + 1]) continue;
-                if (ptga->data[i + 0] != palette_data[j + 2]) continue;
-
-                // Alpha
-                if (ptga->channels == 4)
-                {
-                    if (ptga->data[i + 3] != palette_data[j + 3])
-                        continue;
-                }
+                if (!compare_bytes(&ptga->data[i], &palette_data[j], ptga->channels))
+                    continue;
 
                 color_data[pixel] = color;
                 found = true;
@@ -531,14 +538,18 @@ bool write_tga(const char *filename, tga_image *ptga, tga_type type)
 
             if (!found)
             {
-                rgb_bgr_convert(&ptga->data[i], &palette_data[colors * ptga->channels], ptga->channels);
-                color_data[pixel] = colors;
-                colors++;
+                copy_bytes(&ptga->data[i], &palette_data[palette_size * ptga->channels], ptga->channels);
+                color_data[pixel] = palette_size;
+                palette_size++;
             }
         }
 
+        // RGB to BGR
+        for (unsigned int j = 0, color = 0; j < palette_size * ptga->channels; j += ptga->channels)
+            swap_byte(&palette_data[j], &palette_data[j + 2]);
+
         // Supports only 256 colors
-        if (colors > 256)
+        if (palette_size > 256)
         {
             free(palette_data);
             free(color_data);
@@ -547,7 +558,7 @@ bool write_tga(const char *filename, tga_image *ptga, tga_type type)
 
         color_map_type = 1;
         first_entry_index = 0;
-        color_map_length = colors;
+        color_map_length = palette_size;
         color_map_entry_size = ptga->channels * 8;
     }
 
@@ -594,7 +605,7 @@ bool write_tga(const char *filename, tga_image *ptga, tga_type type)
 
     if (type == TGA_MAPPED)
     {
-        fwrite(palette_data, sizeof(byte), colors * ptga->channels, file);
+        fwrite(palette_data, sizeof(byte), palette_size * ptga->channels, file);
         fwrite(color_data, sizeof(byte), ptga->width * ptga->height, file);
 
         free(palette_data);
@@ -629,7 +640,7 @@ bool write_tga(const char *filename, tga_image *ptga, tga_type type)
     }
     else if (type == TGA_MAPPED_RLE)
     {
-        fwrite(palette_data, sizeof(byte), colors *ptga->channels, file);
+        fwrite(palette_data, sizeof(byte), palette_size *ptga->channels, file);
 
         int duplicates = 0;
         int different = 0;
@@ -640,12 +651,12 @@ bool write_tga(const char *filename, tga_image *ptga, tga_type type)
             {
                 int index = i * ptga->width + j;
 
-                // Count duplicate colors
+                // Count duplicate pixels
                 if (!different)
                 {
                     if (j + 1 < ptga->width && color_data[index] == color_data[index + 1])
                     {
-                        // A packet cannot contain more than 128 colors
+                        // A packet cannot contain more than 128 pixels
                         if (duplicates + 1 < 128)
                         {
                             duplicates++;
@@ -668,10 +679,10 @@ bool write_tga(const char *filename, tga_image *ptga, tga_type type)
                     continue;
                 }
 
-                // Count different colors
+                // Count different pixels
                 if (!duplicates)
                 {
-                    // A packet cannot contain more than 128 colors
+                    // A packet cannot contain more than 128 pixels
                     if (different + 1 < 128 && j + 1 < ptga->width)
                     {
                         if (color_data[index] != color_data[index + 1])
@@ -713,28 +724,13 @@ bool write_tga(const char *filename, tga_image *ptga, tga_type type)
             {
                 int index = (i * ptga->width + j) * ptga->channels;
 
-                // Count duplicate colors
+                // Count duplicate pixels
                 if (!different)
                 {
-                    if (j + 1 < ptga->width)
+                    // A packet cannot contain more than 128 pixels
+                    if (j + 1 < ptga->width && duplicates + 1 < 128)
                     {
-                        bool duplicate = true;
-
-                        if (ptga->data[index] != ptga->data[index + ptga->channels])
-                            duplicate = false;
-                        if (ptga->data[index + 1] != ptga->data[index + ptga->channels + 1])
-                            duplicate = false;
-                        if (ptga->data[index + 2] != ptga->data[index + ptga->channels + 2])
-                            duplicate = false;
-
-                        if (ptga->channels == 4)
-                        {
-                            if (ptga->data[index + 3] != ptga->data[index + ptga->channels + 3])
-                                duplicate = false;
-                        }
-
-                        // A packet cannot contain more than 128 colors
-                        if (duplicate && duplicates + 1 < 128)
+                        if (compare_bytes(&ptga->data[index], &ptga->data[index + ptga->channels], ptga->channels))
                         {
                             duplicates++;
                             continue;
@@ -759,28 +755,13 @@ bool write_tga(const char *filename, tga_image *ptga, tga_type type)
                     continue;
                 }
 
-                // Count different colors
+                // Count different pixels
                 if (!duplicates)
                 {
-                    // A packet cannot contain more than 128 colors
+                    // A packet cannot contain more than 128 pixels
                     if (different + 1 < 128 && j + 1 < ptga->width)
                     {
-                        bool duplicate = true;
-
-                        if (ptga->data[index] != ptga->data[index + ptga->channels])
-                            duplicate = false;
-                        if (ptga->data[index + 1] != ptga->data[index + ptga->channels + 1])
-                            duplicate = false;
-                        if (ptga->data[index + 2] != ptga->data[index + ptga->channels + 2])
-                            duplicate = false;
-
-                        if (ptga->channels == 4)
-                        {
-                            if (ptga->data[index + 3] != ptga->data[index + ptga->channels + 3])
-                                duplicate = false;
-                        }
-
-                        if (!duplicate)
+                        if (!compare_bytes(&ptga->data[index], &ptga->data[index + ptga->channels], ptga->channels))
                         {
                             different++;
                             continue;
@@ -822,28 +803,13 @@ bool write_tga(const char *filename, tga_image *ptga, tga_type type)
             {
                 int index = (i * ptga->width + j) * ptga->channels;
 
-                // Count duplicate colors
+                // Count duplicate pixels
                 if (!different)
                 {
-                    if (j + 1 < ptga->width)
+                    // A packet cannot contain more than 128 pixels
+                    if (j + 1 < ptga->width && duplicates + 1 < 128)
                     {
-                        bool duplicate = true;
-
-                        if (ptga->data[index] != ptga->data[index + ptga->channels])
-                            duplicate = false;
-                        if (ptga->data[index + 1] != ptga->data[index + ptga->channels + 1])
-                            duplicate = false;
-                        if (ptga->data[index + 2] != ptga->data[index + ptga->channels + 2])
-                            duplicate = false;
-
-                        if (ptga->channels == 4)
-                        {
-                            if (ptga->data[index + 3] != ptga->data[index + ptga->channels + 3])
-                                duplicate = false;
-                        }
-
-                        // A packet cannot contain more than 128 colors
-                        if (duplicate && duplicates + 1 < 128)
+                        if (compare_bytes(&ptga->data[index], &ptga->data[index + ptga->channels], ptga->channels))
                         {
                             duplicates++;
                             continue;
@@ -868,28 +834,13 @@ bool write_tga(const char *filename, tga_image *ptga, tga_type type)
                     continue;
                 }
 
-                // Count different colors
+                // Count different pixels
                 if (!duplicates)
                 {
-                    // A packet cannot contain more than 128 colors
+                    // A packet cannot contain more than 128 pixels
                     if (different + 1 < 128 && j + 1 < ptga->width)
                     {
-                        bool duplicate = true;
-
-                        if (ptga->data[index] != ptga->data[index + ptga->channels])
-                            duplicate = false;
-                        if (ptga->data[index + 1] != ptga->data[index + ptga->channels + 1])
-                            duplicate = false;
-                        if (ptga->data[index + 2] != ptga->data[index + ptga->channels + 2])
-                            duplicate = false;
-
-                        if (ptga->channels == 4)
-                        {
-                            if (ptga->data[index + 3] != ptga->data[index + ptga->channels + 3])
-                                duplicate = false;
-                        }
-
-                        if (!duplicate)
+                        if (!compare_bytes(&ptga->data[index], &ptga->data[index + ptga->channels], ptga->channels))
                         {
                             different++;
                             continue;
@@ -937,12 +888,12 @@ bool write_tga(const char *filename, tga_image *ptga, tga_type type)
             {
                 int index = i * ptga->width + j;
 
-                // Count duplicate colors
+                // Count duplicate pixels
                 if (!different)
                 {
                     if (j + 1 < ptga->width && bw_data[index] == bw_data[index + 1])
                     {
-                        // A packet cannot contain more than 128 colors
+                        // A packet cannot contain more than 128 pixels
                         if (duplicates + 1 < 128)
                         {
                             duplicates++;
@@ -965,10 +916,10 @@ bool write_tga(const char *filename, tga_image *ptga, tga_type type)
                     continue;
                 }
 
-                // Count different colors
+                // Count different pixels
                 if (!duplicates)
                 {
-                    // A packet cannot contain more than 128 colors
+                    // A packet cannot contain more than 128 pixels
                     if (different + 1 < 128 && j + 1 < ptga->width)
                     {
                         if (bw_data[index] != bw_data[index + 1])
