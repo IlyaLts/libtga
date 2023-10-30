@@ -61,7 +61,7 @@ static rgb_to_pixel(byte *data, word *pixel, int channels)
     *pixel |= (data[0] >> 3) << 10;     // R
     *pixel |= (data[1] >> 3) << 5;      // G
     *pixel |= (data[2] >> 3);           // B
-
+    
     // Alpha
     if (channels == 4)
         *pixel |= data[3] ? 1 << 15 : 0 << 15;
@@ -654,9 +654,8 @@ bool write_tga(const char *filename, tga_image *ptga, tga_type type)
                 // Write a run-length packet
                 if (duplicates)
                 {
-                    byte rle_id = duplicates + 1;
+                    byte rle_id = duplicates;
                     rle_id |= 1 << 7;
-                    rle_id--;
 
                     fwrite(&rle_id, sizeof(byte), 1, file);
                     fwrite(&color_data[index], sizeof(byte), 1, file);
@@ -686,9 +685,7 @@ bool write_tga(const char *filename, tga_image *ptga, tga_type type)
                 }
 
                 // Write a raw packet
-                byte rle_id = different + 1;
-                rle_id--;
-
+                byte rle_id = different;
                 fwrite(&rle_id, sizeof(rle_id), 1, file);
                 fwrite(&color_data[index - different], sizeof(byte), different + 1, file);
 
@@ -727,9 +724,8 @@ bool write_tga(const char *filename, tga_image *ptga, tga_type type)
                 // Write a run-length packet
                 if (duplicates)
                 {
-                    byte rle_id = duplicates + 1;
+                    byte rle_id = duplicates;
                     rle_id |= 1 << 7;
-                    rle_id--;
 
                     byte colors[4];
                     rgb_bgr_convert(&ptga->data[index], &colors[0], ptga->channels);
@@ -762,8 +758,7 @@ bool write_tga(const char *filename, tga_image *ptga, tga_type type)
                 }
 
                 // Write a raw packet
-                byte rle_id = different + 1;
-                rle_id--;
+                byte rle_id = different;
                 fwrite(&rle_id, sizeof(rle_id), 1, file);
 
                 for (int k = 0; k < different + 1; k++)
@@ -806,9 +801,8 @@ bool write_tga(const char *filename, tga_image *ptga, tga_type type)
                 // Write a run-length packet
                 if (duplicates)
                 {
-                    byte rle_id = duplicates + 1;
+                    byte rle_id = duplicates;
                     rle_id |= 1 << 7;
-                    rle_id--;
 
                     word pixel;
                     rgb_to_pixel(&ptga->data[index], &pixel, ptga->channels);
@@ -841,8 +835,7 @@ bool write_tga(const char *filename, tga_image *ptga, tga_type type)
                 }
 
                 // Write a raw packet
-                byte rle_id = different + 1;
-                rle_id--;
+                byte rle_id = different;
                 fwrite(&rle_id, sizeof(rle_id), 1, file);
 
                 for (int k = 0; k < different + 1; k++)
@@ -891,9 +884,8 @@ bool write_tga(const char *filename, tga_image *ptga, tga_type type)
                 // Write a run-length packet
                 if (duplicates)
                 {
-                    byte rle_id = duplicates + 1;
+                    byte rle_id = duplicates;
                     rle_id |= 1 << 7;
-                    rle_id--;
 
                     fwrite(&rle_id, sizeof(byte), 1, file);
                     fwrite(&bw_data[index], sizeof(word), 1, file);
@@ -923,9 +915,7 @@ bool write_tga(const char *filename, tga_image *ptga, tga_type type)
                 }
 
                 // Write a raw packet
-                byte rle_id = different + 1;
-                rle_id--;
-
+                byte rle_id = different;
                 fwrite(&rle_id, sizeof(rle_id), 1, file);
                 fwrite(&bw_data[index - different], sizeof(word), different + 1, file);
 
