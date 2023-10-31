@@ -19,7 +19,7 @@ int main()
 	
 	flip_tga_horizontally(&image);
 
-	if (!write_tga("flipped.tga", &image, TGA_RGB))
+	if (!save_tga("flipped.tga", &image, TGA_RGB))
 	{
 		printf("Error: Failed to save TGA image.\n");
 		return 1;
@@ -49,12 +49,13 @@ int main()
 | flip_tga_horizontally(tga_image *ptga) | Flips the TGA image horizontally. |
 | flip_tga_vertically(tga_image *ptga) | Flips the TGA image vertically. |
 | load_tga(const char *filename, tga_image *ptga) | Loads a TGA image from the specified file. |
-| load_tga2(const char *filename, tga_image *tga, tga_filefunc_def *ptga_filefunc_def) | Loads a TGA image from the specified file using the custom file functions specified in the ptga_filefunc_def structure. |
+| load_tga_ext(const char *filename, tga_image *tga, tga_func_def *func_def) | Loads a TGA image from the specified file using the custom file functions specified in the tga_func_def structure. |
 | free_tga(tga_image *ptga) | Frees the memory allocated for the TGA image. |
-| write_tga(const char *filename, tga_image *ptga, tga_type type) | Writes the TGA image to the specified file in the specified format. |
+| save_tga(const char *filename, tga_image *ptga, tga_type type) | Saves a TGA image to the specified file in the specified format. |
+| save_tga_ext(const char *filename, tga_image *ptga, tga_type type, tga_func_def *func_def) | Saves a TGA image to the specified file in the specified format using the custom file functions specified in the tga_func_def structure. |
 
 ### Notes
-Using ```write_tga``` with any mapped type argument will fail if the image has over 256 colors.
+Using ```save_tga``` and ```save_tga_ext``` with any mapped type argument will fail if the image has over 256 colors.
 
 ## License
 

@@ -74,15 +74,15 @@ typedef struct
     close_file_func close_file;
 
     void *file;
-} tga_filefunc_def;
+} tga_func_def;
 
-extern void flip_tga_horizontally(tga_image *ptga);
-extern void flip_tga_vertically(tga_image *ptga);
-extern bool load_tga(const char *filename, tga_image *ptga);
-extern bool load_tga2(const char *filename, tga_image *tga, tga_filefunc_def *ptga_filefunc_def);
-extern void free_tga(tga_image *ptga);
-extern bool write_tga(const char *filename, tga_image *ptga, tga_type type);
-extern bool write_tga2(const char *filename, tga_image *ptga, tga_type type, tga_filefunc_def *ptga_filefunc_def);
+extern void flip_tga_horizontally(tga_image *tga);
+extern void flip_tga_vertically(tga_image *tga);
+extern bool load_tga(const char *filename, tga_image *tga);
+extern bool load_tga_ext(const char *filename, tga_image *tga, tga_func_def *func_def);
+extern void free_tga(tga_image *tga);
+extern bool save_tga(const char *filename, tga_image *tga, tga_type type);
+extern bool save_tga_ext(const char *filename, tga_image *tga, tga_type type, tga_func_def *func_def);
 
 #ifdef __cplusplus
 }
