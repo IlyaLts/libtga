@@ -61,6 +61,7 @@ typedef struct
 
 typedef void *(*open_file_func) (const char *filename, char const *mode, void *stream);
 typedef size_t(*read_file_func) (void *buffer, size_t size, size_t count, void *stream);
+typedef size_t(*write_file_func) (void *buffer, size_t size, size_t count, void *stream);
 typedef long(*seek_file_func) (void *stream, long offset, int origin);
 typedef int(*close_file_func) (void *stream);
 
@@ -68,6 +69,7 @@ typedef struct
 {
     open_file_func open_file;
     read_file_func read_file;
+    write_file_func write_file;
     seek_file_func seek_file;
     close_file_func close_file;
 
@@ -80,6 +82,7 @@ extern bool load_tga(const char *filename, tga_image *ptga);
 extern bool load_tga2(const char *filename, tga_image *tga, tga_filefunc_def *ptga_filefunc_def);
 extern void free_tga(tga_image *ptga);
 extern bool write_tga(const char *filename, tga_image *ptga, tga_type type);
+extern bool write_tga2(const char *filename, tga_image *ptga, tga_type type, tga_filefunc_def *ptga_filefunc_def);
 
 #ifdef __cplusplus
 }

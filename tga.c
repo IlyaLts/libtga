@@ -493,6 +493,17 @@ void free_tga(tga_image *ptga)
 
 bool write_tga(const char *filename, tga_image *ptga, tga_type type)
 {
+    tga_filefunc_def ptga_filefunc_def;
+
+    ptga_filefunc_def.open_file = fopen_wrapper;
+    ptga_filefunc_def.write_file = fwrite;
+    ptga_filefunc_def.close_file = fclose;
+
+    return write_tga2(filename, ptga, type, &ptga_filefunc_def);
+}
+
+bool write_tga2(const char *filename, tga_image *ptga, tga_type type, tga_filefunc_def *ptga_filefunc_def)
+{
     byte image_type;
     byte bits;
     int size = ptga->width * ptga->height * ptga->channels;
@@ -508,8 +519,8 @@ bool write_tga(const char *filename, tga_image *ptga, tga_type type)
     if (!filename || !ptga)
         return false;
     
-    FILE *file = fopen(filename, "wb");
-    if (!file) return false;
+    ptga_filefunc_def->file = ptga_filefunc_def->open_file(filename, "wb", ptga_filefunc_def->file);
+    if (!ptga_filefunc_def->file) return false;
 
     // Generate color palette
     if (type == TGA_MAPPED || type == TGA_MAPPED_RLE)
@@ -548,6 +559,7 @@ bool write_tga(const char *filename, tga_image *ptga, tga_type type)
         {
             free(palette_data);
             free(color_data);
+            ptga_filefunc_def->close_file(ptga_filefunc_def->file);
             return false;
         }
 
@@ -596,12 +608,12 @@ bool write_tga(const char *filename, tga_image *ptga, tga_type type)
                       bits,
                       0};
 
-    fwrite(header, sizeof(header), 1, file);
+    ptga_filefunc_def->write_file(header, sizeof(header), 1, ptga_filefunc_def->file);
 
     if (type == TGA_MAPPED)
     {
-        fwrite(palette_data, sizeof(byte), palette_size * ptga->channels, file);
-        fwrite(color_data, sizeof(byte), ptga->width * ptga->height, file);
+        ptga_filefunc_def->write_file(palette_data, sizeof(byte), palette_size * ptga->channels, ptga_filefunc_def->file);
+        ptga_filefunc_def->write_file(color_data, sizeof(byte), ptga->width * ptga->height, ptga_filefunc_def->file);
 
         free(palette_data);
         free(color_data);
@@ -612,7 +624,7 @@ bool write_tga(const char *filename, tga_image *ptga, tga_type type)
         {
             unsigned char colors[4];
             rgb_bgr_convert(&ptga->data[i], &colors[0], ptga->channels);
-            fwrite(colors, sizeof(byte), ptga->channels, file);
+            ptga_filefunc_def->write_file(colors, sizeof(byte), ptga->channels, ptga_filefunc_def->file);
         }
     }
     else if (type == TGA_RGB16)
@@ -621,7 +633,7 @@ bool write_tga(const char *filename, tga_image *ptga, tga_type type)
         {
             word pixel;
             rgb_to_pixel(&ptga->data[i], &pixel, ptga->channels);
-            fwrite(&pixel, sizeof(word), 1, file);
+            ptga_filefunc_def->write_file(&pixel, sizeof(word), 1, ptga_filefunc_def->file);
         }
     }
     else if (type == TGA_BW)
@@ -630,12 +642,12 @@ bool write_tga(const char *filename, tga_image *ptga, tga_type type)
         {
             word pixel;
             rgb_to_bw(&ptga->data[i], &pixel, ptga->channels);
-            fwrite(&pixel, sizeof(pixel), 1, file);
+            ptga_filefunc_def->write_file(&pixel, sizeof(pixel), 1, ptga_filefunc_def->file);
         }
     }
     else if (type == TGA_MAPPED_RLE)
     {
-        fwrite(palette_data, sizeof(byte), palette_size *ptga->channels, file);
+        ptga_filefunc_def->write_file(palette_data, sizeof(byte), palette_size *ptga->channels, ptga_filefunc_def->file);
 
         int duplicates = 0;
         int different = 0;
@@ -666,8 +678,8 @@ bool write_tga(const char *filename, tga_image *ptga, tga_type type)
                     byte rle_id = duplicates;
                     rle_id |= 1 << 7;
 
-                    fwrite(&rle_id, sizeof(byte), 1, file);
-                    fwrite(&color_data[index], sizeof(byte), 1, file);
+                    ptga_filefunc_def->write_file(&rle_id, sizeof(byte), 1, ptga_filefunc_def->file);
+                    ptga_filefunc_def->write_file(&color_data[index], sizeof(byte), 1, ptga_filefunc_def->file);
 
                     duplicates = 0;
                     continue;
@@ -695,8 +707,8 @@ bool write_tga(const char *filename, tga_image *ptga, tga_type type)
 
                 // Write a raw packet
                 byte rle_id = different;
-                fwrite(&rle_id, sizeof(rle_id), 1, file);
-                fwrite(&color_data[index - different], sizeof(byte), different + 1, file);
+                ptga_filefunc_def->write_file(&rle_id, sizeof(rle_id), 1, ptga_filefunc_def->file);
+                ptga_filefunc_def->write_file(&color_data[index - different], sizeof(byte), different + 1, ptga_filefunc_def->file);
 
                 different = 0;
             }
@@ -739,8 +751,8 @@ bool write_tga(const char *filename, tga_image *ptga, tga_type type)
                     byte colors[4];
                     rgb_bgr_convert(&ptga->data[index], &colors[0], ptga->channels);
 
-                    fwrite(&rle_id, sizeof(byte), 1, file);
-                    fwrite(&colors, sizeof(byte), ptga->channels, file);
+                    ptga_filefunc_def->write_file(&rle_id, sizeof(byte), 1, ptga_filefunc_def->file);
+                    ptga_filefunc_def->write_file(&colors, sizeof(byte), ptga->channels, ptga_filefunc_def->file);
 
                     duplicates = 0;
                     continue;
@@ -768,14 +780,14 @@ bool write_tga(const char *filename, tga_image *ptga, tga_type type)
 
                 // Write a raw packet
                 byte rle_id = different;
-                fwrite(&rle_id, sizeof(rle_id), 1, file);
+                ptga_filefunc_def->write_file(&rle_id, sizeof(rle_id), 1, ptga_filefunc_def->file);
 
                 for (int k = 0; k < different + 1; k++)
                 {
                     byte colors[4];
                     rgb_bgr_convert(&ptga->data[index - (different - k) * ptga->channels], &colors[0], ptga->channels);
 
-                    fwrite(&colors, sizeof(byte), ptga->channels, file);
+                    ptga_filefunc_def->write_file(&colors, sizeof(byte), ptga->channels, ptga_filefunc_def->file);
                 }
 
                 different = 0;
@@ -816,8 +828,8 @@ bool write_tga(const char *filename, tga_image *ptga, tga_type type)
                     word pixel;
                     rgb_to_pixel(&ptga->data[index], &pixel, ptga->channels);
 
-                    fwrite(&rle_id, sizeof(byte), 1, file);
-                    fwrite(&pixel, sizeof(word), 1, file);
+                    ptga_filefunc_def->write_file(&rle_id, sizeof(byte), 1, ptga_filefunc_def->file);
+                    ptga_filefunc_def->write_file(&pixel, sizeof(word), 1, ptga_filefunc_def->file);
 
                     duplicates = 0;
                     continue;
@@ -845,13 +857,13 @@ bool write_tga(const char *filename, tga_image *ptga, tga_type type)
 
                 // Write a raw packet
                 byte rle_id = different;
-                fwrite(&rle_id, sizeof(rle_id), 1, file);
+                ptga_filefunc_def->write_file(&rle_id, sizeof(rle_id), 1, ptga_filefunc_def->file);
 
                 for (int k = 0; k < different + 1; k++)
                 {
                     word pixel;
                     rgb_to_pixel(&ptga->data[index - (different - k) * ptga->channels], &pixel, ptga->channels);
-                    fwrite(&pixel, sizeof(word), 1, file);
+                    ptga_filefunc_def->write_file(&pixel, sizeof(word), 1, ptga_filefunc_def->file);
                 }
 
                 different = 0;
@@ -896,8 +908,8 @@ bool write_tga(const char *filename, tga_image *ptga, tga_type type)
                     byte rle_id = duplicates;
                     rle_id |= 1 << 7;
 
-                    fwrite(&rle_id, sizeof(byte), 1, file);
-                    fwrite(&bw_data[index], sizeof(word), 1, file);
+                    ptga_filefunc_def->write_file(&rle_id, sizeof(byte), 1, ptga_filefunc_def->file);
+                    ptga_filefunc_def->write_file(&bw_data[index], sizeof(word), 1, ptga_filefunc_def->file);
 
                     duplicates = 0;
                     continue;
@@ -925,8 +937,8 @@ bool write_tga(const char *filename, tga_image *ptga, tga_type type)
 
                 // Write a raw packet
                 byte rle_id = different;
-                fwrite(&rle_id, sizeof(rle_id), 1, file);
-                fwrite(&bw_data[index - different], sizeof(word), different + 1, file);
+                ptga_filefunc_def->write_file(&rle_id, sizeof(rle_id), 1, ptga_filefunc_def->file);
+                ptga_filefunc_def->write_file(&bw_data[index - different], sizeof(word), different + 1, ptga_filefunc_def->file);
 
                 different = 0;
             }
@@ -935,6 +947,6 @@ bool write_tga(const char *filename, tga_image *ptga, tga_type type)
         free(bw_data);
     }
 
-    fclose(file);
+    ptga_filefunc_def->close_file(ptga_filefunc_def->file);
     return true;
 }
