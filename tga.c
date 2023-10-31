@@ -131,11 +131,16 @@ void flip_tga_vertically(tga_image *ptga)
     }
 }
 
+static void *fopen_wrapper(const char *filename, char const *mode, void *stream)
+{
+    return fopen(filename, mode);
+}
+
 bool load_tga(const char *filename, tga_image *ptga)
 {
     tga_filefunc_def ptga_filefunc_def;
     
-    ptga_filefunc_def.open_file = fopen;
+    ptga_filefunc_def.open_file = fopen_wrapper;
     ptga_filefunc_def.read_file = fread;
     ptga_filefunc_def.seek_file = fseek;
     ptga_filefunc_def.close_file = fclose;
@@ -165,15 +170,18 @@ bool load_tga2(const char *filename, tga_image *ptga, tga_filefunc_def *ptga_fil
     int color_channels = 0;
     int channels = 0;
 
-    void *file = ptga_filefunc_def->open_file(filename, "rb");
-    if (!file) return false;
+    ptga_filefunc_def->file = ptga_filefunc_def->open_file(filename, "rb", ptga_filefunc_def->file);
+    if (!ptga_filefunc_def->file) return false;
 
-    ptga_filefunc_def->read_file(&header, sizeof(header), 1, file);
+    ptga_filefunc_def->read_file(&header, sizeof(header), 1, ptga_filefunc_def->file);
 
     image_type = header[2];
 
     if (image_type == TGA_TYPE_NO_IMAGE)
+    {
+        ptga_filefunc_def->close_file(ptga_filefunc_def->file);
         return false;
+    }
 
     id_length = header[0];
     color_map_type = header[1];
@@ -184,7 +192,7 @@ bool load_tga2(const char *filename, tga_image *ptga, tga_filefunc_def *ptga_fil
     bits_per_pixel = header[16];
 
     // Skip optional image ID field
-    if (id_length) ptga_filefunc_def->seek_file(file, id_length, SEEK_CUR);
+    if (id_length) ptga_filefunc_def->seek_file(ptga_filefunc_def->file, id_length, SEEK_CUR);
 
     // Load color map data if exists
     if (color_map_type)
@@ -195,7 +203,7 @@ bool load_tga2(const char *filename, tga_image *ptga, tga_filefunc_def *ptga_fil
 
         color_channels = (color_map_entry_size / 8);
         color_data = (byte *)malloc(color_map_length * color_channels);
-        ptga_filefunc_def->read_file(color_data, sizeof(byte), color_map_length * color_channels, file);
+        ptga_filefunc_def->read_file(color_data, sizeof(byte), color_map_length * color_channels, ptga_filefunc_def->file);
     }
 
     // Color-mapped image
@@ -205,7 +213,7 @@ bool load_tga2(const char *filename, tga_image *ptga, tga_filefunc_def *ptga_fil
         {
             channels = color_channels;
             ptga->data = (byte *)malloc(width * height * channels);
-            ptga_filefunc_def->read_file(ptga->data, sizeof(byte), width * height, file);
+            ptga_filefunc_def->read_file(ptga->data, sizeof(byte), width * height, ptga_filefunc_def->file);
 
             for (int i = width * height - 1; i >= 0; i--)
                 rgb_bgr_convert(&color_data[ptga->data[i] * color_channels], &ptga->data[i * channels], channels);
@@ -220,7 +228,7 @@ bool load_tga2(const char *filename, tga_image *ptga, tga_filefunc_def *ptga_fil
         {
             channels = bits_per_pixel / 8;
             ptga->data = (byte *)malloc(width * height * channels);
-            ptga_filefunc_def->read_file(ptga->data, sizeof(byte), width * height * channels, file);
+            ptga_filefunc_def->read_file(ptga->data, sizeof(byte), width * height * channels, ptga_filefunc_def->file);
 
             for (int y = 0; y < height; y++)
             {
@@ -240,7 +248,7 @@ bool load_tga2(const char *filename, tga_image *ptga, tga_filefunc_def *ptga_fil
                 channels = 3;
 
             ptga->data = (byte *)malloc(width * height * channels);
-            ptga_filefunc_def->read_file(ptga->data, sizeof(word), width * height, file);
+            ptga_filefunc_def->read_file(ptga->data, sizeof(word), width * height, ptga_filefunc_def->file);
 
             for (int i = width * height - 1; i >= 0; i--)
             {
@@ -260,7 +268,7 @@ bool load_tga2(const char *filename, tga_image *ptga, tga_filefunc_def *ptga_fil
         {
             channels = 4;
             ptga->data = (byte *)malloc(width * height * channels);
-            ptga_filefunc_def->read_file(ptga->data, sizeof(byte), width * height * sizeof(word), file);
+            ptga_filefunc_def->read_file(ptga->data, sizeof(byte), width * height * sizeof(word), ptga_filefunc_def->file);
 
             for (int i = width * height - 1; i >= 0; i--)
                 bw_to_rgb((word *)&ptga->data[i * sizeof(word)], &ptga->data[i * channels], channels);
@@ -280,14 +288,14 @@ bool load_tga2(const char *filename, tga_image *ptga, tga_filefunc_def *ptga_fil
 
             for (int i = 0; i < width * height;)
             {
-                ptga_filefunc_def->read_file(&rle_id, sizeof(byte), 1, file);
+                ptga_filefunc_def->read_file(&rle_id, sizeof(byte), 1, ptga_filefunc_def->file);
 
                 // Run-length packet
                 if (rle_id & 0x80)
                 {
                     byte pixel = 0;
                     rle_id -= 127;
-                    ptga_filefunc_def->read_file(&pixel, sizeof(byte), 1, file);
+                    ptga_filefunc_def->read_file(&pixel, sizeof(byte), 1, ptga_filefunc_def->file);
 
                     while (rle_id)
                     {
@@ -301,7 +309,7 @@ bool load_tga2(const char *filename, tga_image *ptga, tga_filefunc_def *ptga_fil
                 else
                 {
                     rle_id++;
-                    ptga_filefunc_def->read_file(&ptga->data[i * channels], sizeof(byte), rle_id, file);
+                    ptga_filefunc_def->read_file(&ptga->data[i * channels], sizeof(byte), rle_id, ptga_filefunc_def->file);
 
                     for (int j = rle_id - 1; j >= 0; j--)
                         rgb_bgr_convert(&color_data[ptga->data[i * channels + j] * color_channels], &ptga->data[(i + j) * channels], channels);
@@ -325,14 +333,14 @@ bool load_tga2(const char *filename, tga_image *ptga, tga_filefunc_def *ptga_fil
 
             for (int i = 0; i < width * height;)
             {
-                ptga_filefunc_def->read_file(&rle_id, sizeof(byte), 1, file);
+                ptga_filefunc_def->read_file(&rle_id, sizeof(byte), 1, ptga_filefunc_def->file);
 
                 // Run-length packet
                 if (rle_id & 0x80)
                 {
                     byte colors[4];
                     rle_id -= 127;
-                    ptga_filefunc_def->read_file(&colors, sizeof(byte), channels, file);
+                    ptga_filefunc_def->read_file(&colors, sizeof(byte), channels, ptga_filefunc_def->file);
 
                     while (rle_id)
                     {
@@ -346,7 +354,7 @@ bool load_tga2(const char *filename, tga_image *ptga, tga_filefunc_def *ptga_fil
                 else
                 {
                     rle_id++;
-                    ptga_filefunc_def->read_file(&ptga->data[i * channels], sizeof(byte), rle_id * channels, file);
+                    ptga_filefunc_def->read_file(&ptga->data[i * channels], sizeof(byte), rle_id * channels, ptga_filefunc_def->file);
 
                     while (rle_id)
                     {
@@ -371,14 +379,14 @@ bool load_tga2(const char *filename, tga_image *ptga, tga_filefunc_def *ptga_fil
 
             for (int i = 0; i < width * height;)
             {
-                ptga_filefunc_def->read_file(&rle_id, sizeof(byte), 1, file);
+                ptga_filefunc_def->read_file(&rle_id, sizeof(byte), 1, ptga_filefunc_def->file);
 
                 // Run-length packet
                 if (rle_id & 0x80)
                 {
                     word pixel = 0;
                     rle_id -= 127;
-                    ptga_filefunc_def->read_file(&pixel, sizeof(word), 1, file);
+                    ptga_filefunc_def->read_file(&pixel, sizeof(word), 1, ptga_filefunc_def->file);
 
                     while (rle_id)
                     {
@@ -392,7 +400,7 @@ bool load_tga2(const char *filename, tga_image *ptga, tga_filefunc_def *ptga_fil
                 else
                 {
                     rle_id++;
-                    ptga_filefunc_def->read_file(&ptga->data[i * channels], sizeof(byte), rle_id * sizeof(word), file);
+                    ptga_filefunc_def->read_file(&ptga->data[i * channels], sizeof(byte), rle_id * sizeof(word), ptga_filefunc_def->file);
 
                     for (int j = rle_id - 1; j >= 0; j--)
                     {
@@ -421,14 +429,14 @@ bool load_tga2(const char *filename, tga_image *ptga, tga_filefunc_def *ptga_fil
 
             for (int i = 0; i < width * height;)
             {
-                ptga_filefunc_def->read_file(&rle_id, sizeof(byte), 1, file);
+                ptga_filefunc_def->read_file(&rle_id, sizeof(byte), 1, ptga_filefunc_def->file);
 
                 // Run-length packet
                 if (rle_id & 0x80)
                 {
                     word pixel;
                     rle_id -= 127;
-                    ptga_filefunc_def->read_file(&pixel, sizeof(word), 1, file);
+                    ptga_filefunc_def->read_file(&pixel, sizeof(word), 1, ptga_filefunc_def->file);
 
                     while (rle_id)
                     {
@@ -442,7 +450,7 @@ bool load_tga2(const char *filename, tga_image *ptga, tga_filefunc_def *ptga_fil
                 else
                 {
                     rle_id++;
-                    ptga_filefunc_def->read_file(&ptga->data[i * channels], sizeof(byte), rle_id * sizeof(word), file);
+                    ptga_filefunc_def->read_file(&ptga->data[i * channels], sizeof(byte), rle_id * sizeof(word), ptga_filefunc_def->file);
 
                     for (int j = rle_id - 1; j >= 0; j--)
                         bw_to_rgb((word *)&ptga->data[i * channels + j * sizeof(word)], &ptga->data[(i + j) * channels], channels);
@@ -457,6 +465,7 @@ bool load_tga2(const char *filename, tga_image *ptga, tga_filefunc_def *ptga_fil
 
     if (!success)
     {
+        ptga_filefunc_def->close_file(ptga_filefunc_def->file);
         free(color_data);
         return false;
     }
@@ -471,7 +480,7 @@ bool load_tga2(const char *filename, tga_image *ptga, tga_filefunc_def *ptga_fil
     if (y_origin)
         flip_tga_vertically(ptga);
 
-    ptga_filefunc_def->close_file(file);
+    ptga_filefunc_def->close_file(ptga_filefunc_def->file);
     free(color_data);
     return true;
 }

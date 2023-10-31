@@ -59,7 +59,7 @@ typedef struct
     unsigned char *data;
 } tga_image;
 
-typedef void *(*open_file_func) (const char *filename, char const *mode);
+typedef void *(*open_file_func) (const char *filename, char const *mode, void *stream);
 typedef size_t(*read_file_func) (void *buffer, size_t size, size_t count, void *stream);
 typedef long(*seek_file_func) (void *stream, long offset, int origin);
 typedef int(*close_file_func) (void *stream);
@@ -70,6 +70,8 @@ typedef struct
     read_file_func read_file;
     seek_file_func seek_file;
     close_file_func close_file;
+
+    void *file;
 } tga_filefunc_def;
 
 extern void flip_tga_horizontally(tga_image *ptga);
