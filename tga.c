@@ -42,7 +42,7 @@ static void swap_byte(byte *a, byte *b)
     *b = temp;
 }
 
-static rgb_bgr_invert(byte *origin, byte *dest, int channels)
+static rgb_bgr_invert(const byte *origin, byte *dest, int channels)
 {
     // Do not reorder the following code below as the order is very important
 
@@ -80,7 +80,7 @@ static pixel_to_rgb(word pixel, byte *data, int channels)
         data[3] = pixel & 0x8000 ? 255 : 0;
 }
 
-static void rgb_to_bw(byte *data, word *pixel, int channels)
+static void rgb_to_bw(const byte *data, word *pixel, int channels)
 {
     *pixel = (data[0] + data[1] + data[2]) / 3;
 
@@ -91,12 +91,13 @@ static void rgb_to_bw(byte *data, word *pixel, int channels)
         *pixel |= 255 << 8;
 }
 
-static void bw_to_rgb(word *pixel, byte *data, int channels)
+static void bw_to_rgb(const word *pixel, byte *data, int channels)
 {
     // Do not reorder the following code below as the order is very important
 
     // Alpha
-    data[3] = *pixel >> 8;
+    if (channels == 4)
+        data[3] = *pixel >> 8;
 
     // Colors
     data[2] = *pixel & 0xff;
@@ -504,6 +505,9 @@ bool save_tga(const char *filename, tga_image *tga, tga_type type)
 
 bool save_tga_ext(const char *filename, tga_image *tga, tga_type type, tga_func_def *func_def)
 {
+    if (!filename || !tga)
+        return false;
+
     byte image_type;
     byte bits;
     int size = tga->width * tga->height * tga->channels;
@@ -515,9 +519,6 @@ bool save_tga_ext(const char *filename, tga_image *tga, tga_type type, tga_func_
     byte *palette_data = NULL;
     byte *color_data = NULL;
     int palette_size = 0;
-
-    if (!filename || !tga)
-        return false;
     
     func_def->file = func_def->open_file(filename, "wb", func_def->file);
     if (!func_def->file) return false;
