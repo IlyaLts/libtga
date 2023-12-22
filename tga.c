@@ -69,15 +69,15 @@ static rgb_to_pixel(byte *data, word *pixel, int channels)
         *pixel |= 1 << 15;
 }
 
-static pixel_to_rgb(word pixel, byte *data, int channels)
+static pixel_to_rgb(const word *pixel, byte *data, int channels)
 {
-    data[0] = ((pixel >> 10) & 0x1f) << 3;      // R
-    data[1] = ((pixel >> 5) & 0x1f) << 3;       // G
-    data[2] = (pixel & 0x1f) << 3;              // B
+    data[0] = ((*pixel >> 10) & 0x1f) << 3;      // R
+    data[1] = ((*pixel >> 5) & 0x1f) << 3;       // G
+    data[2] = (*pixel & 0x1f) << 3;              // B
 
     // Alpha
     if (channels == 4)
-        data[3] = pixel & 0x8000 ? 255 : 0;
+        data[3] = *pixel & 0x8000 ? 255 : 0;
 }
 
 static void rgb_to_bw(const byte *data, word *pixel, int channels)
@@ -252,12 +252,7 @@ bool load_tga_ext(const char *filename, tga_image *tga, tga_func_def *func_def)
             func_def->read_file(tga->data, sizeof(word), width * height, func_def->file);
 
             for (int i = width * height - 1; i >= 0; i--)
-            {
-                word pixel = (word)tga->data[i * sizeof(word) + 1] << 8 |
-                             (word)tga->data[i * sizeof(word)];
-
-                pixel_to_rgb(pixel, &tga->data[i * channels], channels);
-            }
+                pixel_to_rgb((word *)&tga->data[i * sizeof(word)], &tga->data[i * channels], channels);
 
             success = true;
         }
@@ -285,40 +280,51 @@ bool load_tga_ext(const char *filename, tga_image *tga, tga_func_def *func_def)
         if (bits_per_pixel == 8)
         {
             channels = color_channels;
-            tga->data = (byte *)malloc(width * height * channels);
+
+            int pixels = width * height;
+            int data_size = pixels * channels;
+            int rle_size = pixels * sizeof(byte) + pixels;
+            int index_to_temp = data_size;
+
+            tga->data = (byte *)malloc(data_size + rle_size);
+            func_def->read_file(&tga->data[index_to_temp], sizeof(byte), rle_size, func_def->file);
 
             for (int i = 0; i < width * height;)
             {
-                func_def->read_file(&rle_id, sizeof(byte), 1, func_def->file);
+                rle_id = tga->data[index_to_temp];
+                index_to_temp++;
 
                 // Run-length packet
                 if (rle_id & 0x80)
                 {
-                    byte pixel = 0;
                     rle_id -= 127;
-                    func_def->read_file(&pixel, sizeof(byte), 1, func_def->file);
 
                     while (rle_id)
                     {
-                        rgb_bgr_invert(&color_data[pixel * color_channels], &tga->data[i * channels], channels);
+                        rgb_bgr_invert(&color_data[tga->data[index_to_temp] * color_channels], &tga->data[i * channels], channels);
 
                         i++;
                         rle_id--;
                     }
+
+                    index_to_temp += sizeof(byte);
                 }
                 // Raw packet
                 else
                 {
                     rle_id++;
-                    func_def->read_file(&tga->data[i * channels], sizeof(byte), rle_id, func_def->file);
 
-                    for (int j = rle_id - 1; j >= 0; j--)
-                        rgb_bgr_invert(&color_data[tga->data[i * channels + j] * color_channels], &tga->data[(i + j) * channels], channels);
+                    for (int j = 0; j < rle_id; j++)
+                    {
+                        rgb_bgr_invert(&color_data[tga->data[index_to_temp] * color_channels], &tga->data[(i + j) * channels], channels);
+                        index_to_temp += sizeof(byte);
+                    }
 
                     i += rle_id;
                 }
             }
 
+            realloc(tga->data, data_size);
             success = true;
         }
     }
@@ -330,32 +336,43 @@ bool load_tga_ext(const char *filename, tga_image *tga, tga_func_def *func_def)
         if (bits_per_pixel == 24 || bits_per_pixel == 32)
         {
             channels = bits_per_pixel / 8;
-            tga->data = (byte *)malloc(width * height * channels);
 
+            int data_size = width * height * channels;
+            int rle_size = data_size + width * height;
+            int index_to_temp = data_size;
+
+            tga->data = (byte *)malloc(data_size + rle_size);
+            func_def->read_file(&tga->data[index_to_temp], sizeof(byte), rle_size, func_def->file);
+            
             for (int i = 0; i < width * height;)
             {
-                func_def->read_file(&rle_id, sizeof(byte), 1, func_def->file);
+                rle_id = tga->data[index_to_temp];
+                index_to_temp++;
 
                 // Run-length packet
                 if (rle_id & 0x80)
                 {
-                    byte colors[4];
                     rle_id -= 127;
-                    func_def->read_file(&colors, sizeof(byte), channels, func_def->file);
 
                     while (rle_id)
                     {
-                        rgb_bgr_invert(&colors[0], &tga->data[i * channels], channels);
+                        rgb_bgr_invert(&tga->data[index_to_temp], &tga->data[i * channels], channels);
 
                         i++;
                         rle_id--;
                     }
+
+                    index_to_temp += channels;
                 }
                 // Raw packet
                 else
                 {
                     rle_id++;
-                    func_def->read_file(&tga->data[i * channels], sizeof(byte), rle_id * channels, func_def->file);
+
+                    for (int j = 0; j < rle_id * channels; j++)
+                        tga->data[i * channels + j] = tga->data[index_to_temp + j];
+
+                    index_to_temp += rle_id * channels;
 
                     while (rle_id)
                     {
@@ -367,6 +384,7 @@ bool load_tga_ext(const char *filename, tga_image *tga, tga_func_def *func_def)
                 }
             }
 
+            realloc(tga->data, data_size);
             success = true;
         }
         else if (bits_per_pixel == 15 || bits_per_pixel == 16)
@@ -376,45 +394,50 @@ bool load_tga_ext(const char *filename, tga_image *tga, tga_func_def *func_def)
             else
                 channels = 3;
 
-            tga->data = (byte *)malloc(width * height * channels);
+            int pixels = width * height;
+            int data_size = pixels * channels;
+            int rle_size = pixels * sizeof(word) + pixels;
+            int index_to_temp = data_size;
+
+            tga->data = (byte *)malloc(data_size + rle_size);
+            func_def->read_file(&tga->data[index_to_temp], sizeof(byte), rle_size, func_def->file);
 
             for (int i = 0; i < width * height;)
             {
-                func_def->read_file(&rle_id, sizeof(byte), 1, func_def->file);
+                rle_id = tga->data[index_to_temp];
+                index_to_temp++;
 
                 // Run-length packet
                 if (rle_id & 0x80)
                 {
-                    word pixel = 0;
                     rle_id -= 127;
-                    func_def->read_file(&pixel, sizeof(word), 1, func_def->file);
 
                     while (rle_id)
                     {
-                        pixel_to_rgb(pixel, &tga->data[i * channels], channels);
-
+                        pixel_to_rgb((word *)&tga->data[index_to_temp], &tga->data[i * channels], channels);
+                        
                         i++;
                         rle_id--;
                     }
+
+                    index_to_temp += sizeof(word);
                 }
                 // Raw packet
                 else
                 {
                     rle_id++;
-                    func_def->read_file(&tga->data[i * channels], sizeof(byte), rle_id * sizeof(word), func_def->file);
 
                     for (int j = rle_id - 1; j >= 0; j--)
                     {
-                        word pixel = (word)tga->data[i * channels + j * sizeof(word) + 1] << 8 |
-                                     (word)tga->data[i * channels + j * sizeof(word)];
-
-                        pixel_to_rgb(pixel, &tga->data[(i + j) * channels], channels);
+                        pixel_to_rgb((word *)&tga->data[index_to_temp], &tga->data[(i + j) * channels], channels);
+                        index_to_temp += sizeof(word);
                     }
 
                     i += rle_id;
                 }
             }
 
+            realloc(tga->data, data_size);
             success = true;
         }
     }
@@ -426,40 +449,51 @@ bool load_tga_ext(const char *filename, tga_image *tga, tga_func_def *func_def)
         if (bits_per_pixel == 16)
         {
             channels = 4;
-            tga->data = (byte *)malloc(width * height * channels);
+
+            int pixels = width * height;
+            int data_size = pixels * channels;
+            int rle_size = pixels * sizeof(word) + pixels;
+            int index_to_temp = data_size;
+
+            tga->data = (byte *)malloc(data_size + rle_size);
+            func_def->read_file(&tga->data[index_to_temp], sizeof(byte), rle_size, func_def->file);
 
             for (int i = 0; i < width * height;)
             {
-                func_def->read_file(&rle_id, sizeof(byte), 1, func_def->file);
+                rle_id = tga->data[index_to_temp];
+                index_to_temp++;
 
                 // Run-length packet
                 if (rle_id & 0x80)
                 {
-                    word pixel;
                     rle_id -= 127;
-                    func_def->read_file(&pixel, sizeof(word), 1, func_def->file);
 
                     while (rle_id)
                     {
-                        bw_to_rgb(&pixel, &tga->data[i * channels], channels);
+                        bw_to_rgb((word *)&tga->data[index_to_temp], &tga->data[i * channels], channels);
 
                         i++;
                         rle_id--;
                     }
+
+                    index_to_temp += sizeof(word);
                 }
                 // Raw packet
                 else
                 {
                     rle_id++;
-                    func_def->read_file(&tga->data[i * channels], sizeof(byte), rle_id * sizeof(word), func_def->file);
 
-                    for (int j = rle_id - 1; j >= 0; j--)
-                        bw_to_rgb((word *)&tga->data[i * channels + j * sizeof(word)], &tga->data[(i + j) * channels], channels);
+                    for (int j = 0; j < rle_id; j++)
+                    {
+                        bw_to_rgb((word *)&tga->data[index_to_temp], &tga->data[(i + j) * channels], channels);
+                        index_to_temp += sizeof(word);
+                    }
 
                     i += rle_id;
                 }
             }
 
+            realloc(tga->data, data_size);
             success = true;
         }
     }
