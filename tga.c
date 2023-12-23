@@ -42,7 +42,7 @@ static void swap_byte(byte *a, byte *b)
     *b = temp;
 }
 
-static rgb_bgr_invert(const byte *origin, byte *dest, int channels)
+static void rgb_bgr_invert(const byte *origin, byte *dest, int channels)
 {
     // Do not reorder the following code below as the order is very important
 
@@ -55,7 +55,7 @@ static rgb_bgr_invert(const byte *origin, byte *dest, int channels)
     dest[0] = origin[2];    // R
 }
 
-static rgb_to_pixel(byte *data, word *pixel, int channels)
+static void rgb_to_pixel(const byte *data, word *pixel, int channels)
 {
     *pixel = 0;
     *pixel |= (data[0] >> 3) << 10;     // R
@@ -69,7 +69,7 @@ static rgb_to_pixel(byte *data, word *pixel, int channels)
         *pixel |= 1 << 15;
 }
 
-static pixel_to_rgb(const word *pixel, byte *data, int channels)
+static void pixel_to_rgb(const word *pixel, byte *data, int channels)
 {
     data[0] = ((*pixel >> 10) & 0x1f) << 3;      // R
     data[1] = ((*pixel >> 5) & 0x1f) << 3;       // G
@@ -233,10 +233,10 @@ bool load_tga_ext(const char *filename, tga_image *tga, tga_func_def *func_def)
 
             for (int y = 0; y < height; y++)
             {
-                byte *pLine = &(tga->data[width * channels * y]);
+                byte *pixel = &(tga->data[width * channels * y]);
 
                 for (int i = 0; i < width * channels; i += channels)
-                    swap_byte(&pLine[i], &pLine[i + 2]);
+                    swap_byte(&pixel[i], &pixel[i + 2]);
             }
 
             success = true;
@@ -370,9 +370,10 @@ bool load_tga_ext(const char *filename, tga_image *tga, tga_func_def *func_def)
                     rle_id++;
 
                     for (int j = 0; j < rle_id * channels; j++)
-                        tga->data[i * channels + j] = tga->data[index_to_temp + j];
-
-                    index_to_temp += rle_id * channels;
+                    {
+                        tga->data[i * channels + j] = tga->data[index_to_temp];
+                        index_to_temp++;
+                    }
 
                     while (rle_id)
                     {
