@@ -154,8 +154,6 @@ bool load_tga_ext(const char *filename, tga_image *tga, tga_func_def *func_def)
     if (!tga || !filename || !func_def)
         return false;
 
-    bool success = false;
-
     byte header[18];
 
     byte id_length = 0;
@@ -204,6 +202,8 @@ bool load_tga_ext(const char *filename, tga_image *tga, tga_func_def *func_def)
 
         color_channels = (color_map_entry_size / 8);
         color_data = (byte *)malloc(color_map_length * color_channels);
+        if (!color_data) return false;
+
         func_def->read_file(color_data, sizeof(byte), color_map_length * color_channels, func_def->file);
     }
 
@@ -214,12 +214,16 @@ bool load_tga_ext(const char *filename, tga_image *tga, tga_func_def *func_def)
         {
             channels = color_channels;
             tga->data = (byte *)malloc(width * height * channels);
+            if (!tga->data)
+            {
+                free(color_data);
+                return false;
+            }
+
             func_def->read_file(tga->data, sizeof(byte), width * height, func_def->file);
 
             for (int i = width * height - 1; i >= 0; i--)
                 rgb_bgr_invert(&color_data[tga->data[i] * color_channels], &tga->data[i * channels], channels);
-
-            success = true;
         }
     }
     // True-color image
@@ -229,6 +233,8 @@ bool load_tga_ext(const char *filename, tga_image *tga, tga_func_def *func_def)
         {
             channels = bits_per_pixel / 8;
             tga->data = (byte *)malloc(width * height * channels);
+            if (!tga->data) return false;
+
             func_def->read_file(tga->data, sizeof(byte), width * height * channels, func_def->file);
 
             for (int y = 0; y < height; y++)
@@ -238,8 +244,6 @@ bool load_tga_ext(const char *filename, tga_image *tga, tga_func_def *func_def)
                 for (int i = 0; i < width * channels; i += channels)
                     swap_byte(&pixel[i], &pixel[i + 2]);
             }
-
-            success = true;
         }
         else if (bits_per_pixel == 15 || bits_per_pixel == 16)
         {
@@ -249,12 +253,12 @@ bool load_tga_ext(const char *filename, tga_image *tga, tga_func_def *func_def)
                 channels = 3;
 
             tga->data = (byte *)malloc(width * height * channels);
+            if (!tga->data) return false;
+
             func_def->read_file(tga->data, sizeof(word), width * height, func_def->file);
 
             for (int i = width * height - 1; i >= 0; i--)
                 pixel_to_rgb((word *)&tga->data[i * sizeof(word)], &tga->data[i * channels], channels);
-
-            success = true;
         }
     }
     // Black and white image
@@ -264,19 +268,17 @@ bool load_tga_ext(const char *filename, tga_image *tga, tga_func_def *func_def)
         {
             channels = 4;
             tga->data = (byte *)malloc(width * height * channels);
+            if (!tga->data) return false;
+
             func_def->read_file(tga->data, sizeof(byte), width * height * sizeof(word), func_def->file);
 
             for (int i = width * height - 1; i >= 0; i--)
                 bw_to_rgb((word *)&tga->data[i * sizeof(word)], &tga->data[i * channels], channels);
-
-            success = true;
         }
     }
     // Run-length encoded color-mapped image
     else if (image_type == TGA_TYPE_MAPPED_RLE)
     {
-        byte rle_id = 0;
-
         if (bits_per_pixel == 8)
         {
             channels = color_channels;
@@ -287,11 +289,17 @@ bool load_tga_ext(const char *filename, tga_image *tga, tga_func_def *func_def)
             int index_to_temp = data_size;
 
             tga->data = (byte *)malloc(data_size + rle_size);
+            if (!tga->data)
+            {
+                free(color_data);
+                return false;
+            }
+
             func_def->read_file(&tga->data[index_to_temp], sizeof(byte), rle_size, func_def->file);
 
             for (int i = 0; i < width * height;)
             {
-                rle_id = tga->data[index_to_temp];
+                byte rle_id = tga->data[index_to_temp];
                 index_to_temp++;
 
                 // Run-length packet
@@ -324,15 +332,19 @@ bool load_tga_ext(const char *filename, tga_image *tga, tga_func_def *func_def)
                 }
             }
 
-            realloc(tga->data, data_size);
-            success = true;
+            tga->data = realloc(tga->data, data_size);
+            if (!tga->data)
+            {
+                free(color_data);
+                return false;
+            }
+
+            free(color_data);
         }
     }
     // Run-length encoded true-color image
     else if (image_type == TGA_TYPE_RGB_RLE)
     {
-        byte rle_id = 0;
-
         if (bits_per_pixel == 24 || bits_per_pixel == 32)
         {
             channels = bits_per_pixel / 8;
@@ -342,11 +354,13 @@ bool load_tga_ext(const char *filename, tga_image *tga, tga_func_def *func_def)
             int index_to_temp = data_size;
 
             tga->data = (byte *)malloc(data_size + rle_size);
+            if (!tga->data) return false;
+
             func_def->read_file(&tga->data[index_to_temp], sizeof(byte), rle_size, func_def->file);
             
             for (int i = 0; i < width * height;)
             {
-                rle_id = tga->data[index_to_temp];
+                byte rle_id = tga->data[index_to_temp];
                 index_to_temp++;
 
                 // Run-length packet
@@ -385,8 +399,8 @@ bool load_tga_ext(const char *filename, tga_image *tga, tga_func_def *func_def)
                 }
             }
 
-            realloc(tga->data, data_size);
-            success = true;
+            tga->data = realloc(tga->data, data_size);
+            if (!tga->data) return false;
         }
         else if (bits_per_pixel == 15 || bits_per_pixel == 16)
         {
@@ -401,11 +415,13 @@ bool load_tga_ext(const char *filename, tga_image *tga, tga_func_def *func_def)
             int index_to_temp = data_size;
 
             tga->data = (byte *)malloc(data_size + rle_size);
+            if (!tga->data) return false;
+
             func_def->read_file(&tga->data[index_to_temp], sizeof(byte), rle_size, func_def->file);
 
             for (int i = 0; i < width * height;)
             {
-                rle_id = tga->data[index_to_temp];
+                byte rle_id = tga->data[index_to_temp];
                 index_to_temp++;
 
                 // Run-length packet
@@ -438,15 +454,13 @@ bool load_tga_ext(const char *filename, tga_image *tga, tga_func_def *func_def)
                 }
             }
 
-            realloc(tga->data, data_size);
-            success = true;
+            tga->data = realloc(tga->data, data_size);
+            if (!tga->data) return false;
         }
     }
     // Run-length encoded black and white image
     else if (image_type == TGA_TYPE_BW_RLE)
     {
-        byte rle_id = 0;
-
         if (bits_per_pixel == 16)
         {
             channels = 4;
@@ -457,11 +471,13 @@ bool load_tga_ext(const char *filename, tga_image *tga, tga_func_def *func_def)
             int index_to_temp = data_size;
 
             tga->data = (byte *)malloc(data_size + rle_size);
+            if (!tga->data) return false;
+
             func_def->read_file(&tga->data[index_to_temp], sizeof(byte), rle_size, func_def->file);
 
             for (int i = 0; i < width * height;)
             {
-                rle_id = tga->data[index_to_temp];
+                byte rle_id = tga->data[index_to_temp];
                 index_to_temp++;
 
                 // Run-length packet
@@ -494,17 +510,12 @@ bool load_tga_ext(const char *filename, tga_image *tga, tga_func_def *func_def)
                 }
             }
 
-            realloc(tga->data, data_size);
-            success = true;
+            tga->data = realloc(tga->data, data_size);
+            if (!tga->data) return false;
         }
     }
 
-    if (!success)
-    {
-        func_def->close_file(func_def->file);
-        free(color_data);
-        return false;
-    }
+    func_def->close_file(func_def->file);
 
     tga->channels = channels;
     tga->width = width;
@@ -516,8 +527,6 @@ bool load_tga_ext(const char *filename, tga_image *tga, tga_func_def *func_def)
     if (y_origin)
         flip_tga_vertically(tga);
 
-    func_def->close_file(func_def->file);
-    free(color_data);
     return true;
 }
 
@@ -562,7 +571,14 @@ bool save_tga_ext(const char *filename, tga_image *tga, tga_type type, tga_func_
     if (type == TGA_MAPPED || type == TGA_MAPPED_RLE)
     {
         palette_data = (byte *)malloc(tga->width * tga->height * tga->channels);
+        if (!palette_data) return false;
+
         color_data = (byte *)malloc(tga->width * tga->height);
+        if (!color_data)
+        {
+            free(palette_data);
+            return false;
+        }
 
         for (int i = 0, pixel = 0; i < size; i += tga->channels, pixel++)
         {
@@ -910,6 +926,7 @@ bool save_tga_ext(const char *filename, tga_image *tga, tga_type type, tga_func_
     {
         int bw_size = tga->width * tga->height;
         word *bw_data = (word *)malloc(bw_size * sizeof(word));
+        if (!bw_data) return false;
 
         int duplicates = 0;
         int different = 0;
