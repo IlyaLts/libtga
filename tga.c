@@ -1077,8 +1077,6 @@ static bool write_bw_rle(tga_image *tga, int size, int bits, tga_func_def *func_
 
             if (!func_def->write_file(&rle_id, sizeof(rle_id), 1, func_def->file))
                 return false;
-            
-            int diff_size = different * bytes;
 
             if (func_def->write_file(&bw_data[index - different * bytes], bytes, different + 1, func_def->file) != (different + 1))
                 return false;
