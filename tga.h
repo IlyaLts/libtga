@@ -45,10 +45,12 @@ typedef enum
     TGA_RGB,
     TGA_RGB16,
     TGA_BW,
+    TGA_BW8,
     TGA_MAPPED_RLE,
     TGA_RGB_RLE,
     TGA_RGB16_RLE,
-    TGA_BW_RLE
+    TGA_BW_RLE,
+    TGA_BW8_RLE
 } tga_type;
 
 typedef struct

@@ -80,29 +80,29 @@ static void rgb16_to_rgb(const word *pixel, byte *data, int channels)
         data[3] = *pixel & 0x8000 ? 255 : 0;
 }
 
-static void rgb_to_bw(const byte *data, word *pixel, int channels)
+static void rgb_to_bw(const byte *data, byte *pixel, int channels, int pixel_size)
 {
-    *pixel = (data[0] + data[1] + data[2]) / 3;
+    pixel[0] = (data[0] + data[1] + data[2]) / 3;
 
     // Alpha
     if (channels == 4)
-        *pixel |= data[3] << 8;
-    else
-        *pixel |= 255 << 8;
+        pixel[1] = data[3];
+    else if (pixel_size == 2)
+        pixel[1] = 255;
 }
 
-static void bw_to_rgb(const word *pixel, byte *data, int channels)
+static void bw_to_rgb(const byte *pixel, byte *data, int channels)
 {
     // Do not reorder the following code below as the order is very important
 
     // Alpha
     if (channels == 4)
-        data[3] = *pixel >> 8;
+        data[3] = pixel[1];
 
     // Colors
-    data[2] = *pixel & 0xff;
-    data[1] = *pixel & 0xff;
-    data[0] = *pixel & 0xff;
+    data[2] = pixel[0];
+    data[1] = pixel[0];
+    data[0] = pixel[0];
 }
 
 void flip_tga_horizontally(tga_image *tga)
@@ -216,17 +216,18 @@ static bool read_rgb16(tga_image *tga, tga_func_def *func_def)
 
 static bool read_bw(tga_image *tga, tga_func_def *func_def)
 {
+    int bytes = tga->channels == 4 ? sizeof(word) : sizeof(byte);
     int pixels = tga->width * tga->height;
 
     tga->data = (byte *)malloc(pixels * tga->channels);
     if (!tga->data)
         return false;
 
-    if (func_def->read_file(tga->data, sizeof(byte), pixels * sizeof(word), func_def->file) != (pixels * sizeof(word)))
+    if (func_def->read_file(tga->data, sizeof(byte), pixels * bytes, func_def->file) != (pixels * bytes))
         return false;
 
     for (int i = pixels - 1; i >= 0; i--)
-        bw_to_rgb((word *)&tga->data[i * sizeof(word)], &tga->data[i * tga->channels], tga->channels);
+        bw_to_rgb(&tga->data[i * bytes], &tga->data[i * tga->channels], tga->channels);
 
     return true;
 }
@@ -409,9 +410,10 @@ static bool read_rgb16_rle(tga_image *tga, tga_func_def *func_def)
 
 static bool read_bw_rle(tga_image *tga, tga_func_def *func_def)
 {
+    int bytes = tga->channels == 4 ? sizeof(word) : sizeof(byte);
     int pixels = tga->width * tga->height;
     int data_size = pixels * tga->channels;
-    int rle_size = pixels * sizeof(word) + pixels;
+    int rle_size = pixels * bytes + pixels;
     int index_to_temp = data_size;
 
     tga->data = (byte *)malloc(data_size + rle_size);
@@ -432,13 +434,13 @@ static bool read_bw_rle(tga_image *tga, tga_func_def *func_def)
 
             while (rle_id)
             {
-                bw_to_rgb((word *)&tga->data[index_to_temp], &tga->data[i * tga->channels], tga->channels);
+                bw_to_rgb(&tga->data[index_to_temp], &tga->data[i * tga->channels], tga->channels);
 
                 i++;
                 rle_id--;
             }
 
-            index_to_temp += sizeof(word);
+            index_to_temp += bytes;
         }
         // Raw packet
         else
@@ -447,8 +449,8 @@ static bool read_bw_rle(tga_image *tga, tga_func_def *func_def)
 
             for (int j = 0; j < rle_id; j++)
             {
-                bw_to_rgb((word *)&tga->data[index_to_temp], &tga->data[(i + j) * tga->channels], tga->channels);
-                index_to_temp += sizeof(word);
+                bw_to_rgb(&tga->data[index_to_temp], &tga->data[(i + j) * tga->channels], tga->channels);
+                index_to_temp += bytes;
             }
 
             i += rle_id;
@@ -550,7 +552,10 @@ bool load_tga_ext(const char *filename, tga_image *tga, tga_func_def *func_def)
     }
     else if (image_type == TGA_TYPE_BW || image_type == TGA_TYPE_BW_RLE)
     {
-        tga->channels = 4;
+        if (bits_per_pixel == 16)
+            tga->channels = 4;
+        else
+            tga->channels = 3;
     }
 
     // Color-mapped image
@@ -570,7 +575,7 @@ bool load_tga_ext(const char *filename, tga_image *tga, tga_func_def *func_def)
     // Black and white image
     else if (image_type == TGA_TYPE_BW)
     {
-        if (bits_per_pixel == 16)
+        if (bits_per_pixel == 16 || bits_per_pixel == 8)
             success = read_bw(tga, func_def);
     }
     // Run-length encoded color-mapped image
@@ -728,14 +733,16 @@ static bool write_rgb16(tga_image *tga, int size, tga_func_def *func_def)
     return true;
 }
 
-static bool write_bw(tga_image *tga, int size, tga_func_def *func_def)
+static bool write_bw(tga_image *tga, int size, int bits, tga_func_def *func_def)
 {
+    int bytes = (bits == 16) ? sizeof(word) : sizeof(byte);
+
     for (int i = 0; i < size; i += tga->channels)
     {
-        word pixel;
-        rgb_to_bw(&tga->data[i], &pixel, tga->channels);
+        byte pixel[2];
+        rgb_to_bw(&tga->data[i], (byte *)&pixel, tga->channels, bytes);
 
-        if (!func_def->write_file(&pixel, sizeof(word), 1, func_def->file))
+        if (!func_def->write_file(&pixel[0], bytes, 1, func_def->file))
             return false;
     }
 
@@ -994,29 +1001,31 @@ static bool write_rgb16_rle(tga_image *tga, int size, tga_func_def *func_def)
     return true;
 }
 
-static bool write_bw_rle(tga_image *tga, int size, tga_func_def *func_def)
+static bool write_bw_rle(tga_image *tga, int size, int bits, tga_func_def *func_def)
 {
+    int bytes = (bits == 16) ? sizeof(word) : sizeof(byte);
     int bw_size = tga->width * tga->height;
-    word *bw_data = (word *)malloc(bw_size * sizeof(word));
-    if (!bw_data) return false;
+    byte *bw_data = (byte *)malloc(bw_size * bytes);
+    if (!bw_data)
+        return false;
 
     int duplicates = 0;
     int different = 0;
 
     // Convert RGB image to BW image
-    for (int i = 0, j = 0; i < size; i += tga->channels, j++)
-        rgb_to_bw(&tga->data[i], &bw_data[j], tga->channels);
+    for (int i = 0, j = 0; i < size; i += tga->channels, j += bytes)
+        rgb_to_bw(&tga->data[i], &bw_data[j], tga->channels, bytes);
 
     for (unsigned int i = 0; i < tga->height; i++)
     {
         for (unsigned int j = 0; j < tga->width; j++)
         {
-            int index = i * tga->width + j;
+            int index = (i * tga->width + j) * bytes;
 
             // Count duplicate pixels
             if (!different)
             {
-                if (j + 1 < tga->width && bw_data[index] == bw_data[index + 1])
+                if (j + 1 < tga->width && memcmp(&bw_data[index], &bw_data[index + bytes], bytes) == 0)
                 {
                     // A packet cannot contain more than 128 pixels
                     if (duplicates + 1 < 128)
@@ -1036,7 +1045,7 @@ static bool write_bw_rle(tga_image *tga, int size, tga_func_def *func_def)
                 if (!func_def->write_file(&rle_id, sizeof(byte), 1, func_def->file))
                     return false;
 
-                if (!func_def->write_file(&bw_data[index], sizeof(word), 1, func_def->file))
+                if (!func_def->write_file(&bw_data[index], bytes, 1, func_def->file))
                     return false;
 
                 duplicates = 0;
@@ -1049,7 +1058,7 @@ static bool write_bw_rle(tga_image *tga, int size, tga_func_def *func_def)
                 // A packet cannot contain more than 128 pixels
                 if (different + 1 < 128 && j + 1 < tga->width)
                 {
-                    if (bw_data[index] != bw_data[index + 1])
+                    if (memcmp(&bw_data[index], &bw_data[index + bytes], bytes) != 0)
                     {
                         different++;
                         continue;
@@ -1058,7 +1067,7 @@ static bool write_bw_rle(tga_image *tga, int size, tga_func_def *func_def)
                     {
                         different--;
                         j--;
-                        index--;
+                        index -= bytes;
                     }
                 }
             }
@@ -1069,7 +1078,9 @@ static bool write_bw_rle(tga_image *tga, int size, tga_func_def *func_def)
             if (!func_def->write_file(&rle_id, sizeof(rle_id), 1, func_def->file))
                 return false;
             
-            if (func_def->write_file(&bw_data[index - different], sizeof(word), different + 1, func_def->file) != (different + 1))
+            int diff_size = different * bytes;
+
+            if (func_def->write_file(&bw_data[index - different * bytes], bytes, different + 1, func_def->file) != (different + 1))
                 return false;
 
             different = 0;
@@ -1133,6 +1144,10 @@ bool save_tga_ext(const char *filename, tga_image *tga, tga_type type, tga_func_
         image_type = TGA_TYPE_BW;
     else if (type == TGA_BW_RLE)
         image_type = TGA_TYPE_BW_RLE;
+    else if (type == TGA_BW8)
+        image_type = TGA_TYPE_BW;
+    else if (type == TGA_BW8_RLE)
+        image_type = TGA_TYPE_BW_RLE;
 
     if (type == TGA_MAPPED || type == TGA_MAPPED_RLE)
         bits = 8;
@@ -1142,6 +1157,8 @@ bool save_tga_ext(const char *filename, tga_image *tga, tga_type type, tga_func_
         bits = tga->channels == 4 ? 16 : 15;
     else if (type == TGA_BW || type == TGA_BW_RLE)
         bits = 16;
+    else if (type == TGA_BW8 || type == TGA_BW8_RLE)
+        bits = 8;
 
     byte header[18] = { 0, color_map_type, image_type,
                       (unsigned char)first_entry_index % 256,
@@ -1167,16 +1184,16 @@ bool save_tga_ext(const char *filename, tga_image *tga, tga_type type, tga_func_
         success = write_rgb(tga, size, func_def);
     else if (type == TGA_RGB16)
         success = write_rgb16(tga, size, func_def);
-    else if (type == TGA_BW)
-        success = write_bw(tga, size, func_def);
+    else if (type == TGA_BW || type == TGA_BW8)
+        success = write_bw(tga, size, bits, func_def);
     else if (type == TGA_MAPPED_RLE)
         success = write_mapped_rle(tga, palette_data, color_data, palette_size, func_def);
     else if (type == TGA_RGB_RLE)
         success = write_rgb_rle(tga, size, func_def);
     else if (type == TGA_RGB16_RLE)
         success = write_rgb16_rle(tga, size, func_def);
-    else if (type == TGA_BW_RLE)
-        success = write_bw_rle(tga, size, func_def);
+    else if (type == TGA_BW_RLE || type == TGA_BW8_RLE)
+        success = write_bw_rle(tga, size, bits, func_def);
 
     if (type == TGA_MAPPED || type == TGA_MAPPED_RLE)
     {

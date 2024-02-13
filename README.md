@@ -35,14 +35,16 @@ int main()
   
 | TGA Types | Descriptions |
 | --- | --- |
-| TGA_MAPPED | Uncompressed, color-mapped image. |
+| TGA_MAPPED | Uncompressed, 8-bit color-mapped image. |
 | TGA_RGB | Uncompressed, 24-bit or 32-bit true-color image. |
 | TGA_RGB16 | Uncompressed, 15-bit or 16-bit true-color image. |
-| TGA_BW | Uncompressed, black-and-white image. |
-| TGA_MAPPED_RLE | Run-length encoded, color-mapped image. |
+| TGA_BW | Uncompressed, 16-bit black-and-white image. |
+| TGA_BW8 | Uncompressed, 8-bit black-and-white image. |
+| TGA_MAPPED_RLE | Run-length encoded, 8-bit color-mapped image. |
 | TGA_RGB_RLE | Run-length encoded, 24-bit or 32-bit true-color image. |
 | TGA_RGB16_RLE | Run-length encoded, 15-bit or 16-bit true-color image. |
-| TGA_BW_RLE | Run-length encoded, black-and-white image. |
+| TGA_BW_RLE | Run-length encoded, 16-bit black-and-white image. |
+| TGA_BW8_RLE | Run-length encoded, 8-bit black-and-white image. |
 
 | Functions | Descriptions |
 | --- | --- |
