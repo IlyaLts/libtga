@@ -161,10 +161,7 @@ static bool read_mapped(tga_image *tga, byte **color_data, tga_func_def *func_de
 
     tga->data = (byte *)malloc(pixels * tga->channels);
     if (!tga->data)
-    {
-        free(*color_data);
         return false;
-    }
 
     if (func_def->read_file(tga->data, sizeof(byte), pixels, func_def->file) != pixels)
         return false;
@@ -241,10 +238,7 @@ static bool read_mapped_rle(tga_image *tga, byte **color_data, tga_func_def *fun
 
     tga->data = (byte *)malloc(data_size + rle_size);
     if (!tga->data)
-    {
-        free(*color_data);
         return false;
-    }
 
     if (!func_def->read_file(&tga->data[index_to_temp], sizeof(byte), rle_size, func_def->file))
         return false;
@@ -285,7 +279,6 @@ static bool read_mapped_rle(tga_image *tga, byte **color_data, tga_func_def *fun
     }
 
     tga->data = realloc(tga->data, data_size);
-    free(*color_data);
 
     if (!tga->data)
         return false;
@@ -613,6 +606,9 @@ bool load_tga_ext(const char *filename, tga_image *tga, tga_func_def *func_def)
     {
         free_tga(tga);
     }
+
+    if (image_type == TGA_TYPE_MAPPED || image_type == TGA_TYPE_MAPPED_RLE)
+        free(color_data);
 
     return success;
 }
