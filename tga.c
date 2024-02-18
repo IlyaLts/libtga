@@ -293,7 +293,8 @@ static bool read_rgb_rle(tga_image *tga, tga_func_def *func_def)
     int index_to_temp = data_size;
 
     tga->data = (byte *)malloc(data_size + rle_size);
-    if (!tga->data) return false;
+    if (!tga->data)
+        return false;
 
     if (!func_def->read_file(&tga->data[index_to_temp], sizeof(byte), rle_size, func_def->file))
         return false;
@@ -354,7 +355,8 @@ static bool read_rgb16_rle(tga_image *tga, tga_func_def *func_def)
     int index_to_temp = data_size;
 
     tga->data = (byte *)malloc(data_size + rle_size);
-    if (!tga->data) return false;
+    if (!tga->data)
+        return false;
 
     if (!func_def->read_file(&tga->data[index_to_temp], sizeof(byte), rle_size, func_def->file))
         return false;
@@ -410,7 +412,8 @@ static bool read_bw_rle(tga_image *tga, tga_func_def *func_def)
     int index_to_temp = data_size;
 
     tga->data = (byte *)malloc(data_size + rle_size);
-    if (!tga->data) return false;
+    if (!tga->data)
+        return false;
 
     if (!func_def->read_file(&tga->data[index_to_temp], sizeof(byte), rle_size, func_def->file))
         return false;
@@ -705,7 +708,7 @@ static bool write_rgb(tga_image *tga, int size, tga_func_def *func_def)
 {
     for (int i = 0; i < size; i += tga->channels)
     {
-        unsigned char colors[4];
+        byte colors[4];
         rgb_bgr_invert(&tga->data[i], &colors[0], tga->channels);
 
         if (func_def->write_file(colors, sizeof(byte), tga->channels, func_def->file) != tga->channels)
@@ -745,80 +748,96 @@ static bool write_bw(tga_image *tga, int size, int bits, tga_func_def *func_def)
     return true;
 }
 
+static int write_rle(tga_image *tga, byte *data, int channels, int index, tga_func_def *func_def)
+{
+    int duplicates = 0;
+    int different = 0;
+
+    unsigned int row_size = tga->width * tga->channels;
+    unsigned int end_row = index + (row_size - (index) % row_size);
+
+    for (unsigned int j = index; j < end_row; j += channels)
+    {
+        // Count duplicate pixels
+        if (!different)
+        {
+            if (j + channels < end_row && memcmp(&data[j], &data[j + channels], channels) == 0)
+            {
+                // A packet cannot contain more than 128 pixels
+                if (duplicates + 1 < 128)
+                {
+                    duplicates++;
+                    continue;
+                }
+            }
+        }
+
+        // Write a run-length packet
+        if (duplicates)
+        {
+            byte rle_id = duplicates;
+            rle_id |= 1 << 7;
+
+            if (!func_def->write_file(&rle_id, sizeof(rle_id), 1, func_def->file))
+                return 0;
+
+            return rle_id - 127;
+        }
+
+        // Count different pixels
+        if (!duplicates)
+        {
+            // A packet cannot contain more than 128 pixels
+            if (different + 1 < 128 && j + channels < end_row)
+            {
+                if (memcmp(&data[j], &data[j + channels], channels) != 0)
+                {
+                    different++;
+                    continue;
+                }
+                else
+                {
+                    different--;
+                    j -= channels;
+                }
+            }
+        }
+
+        // Write a raw packet
+        byte rle_id = different;
+
+        if (!func_def->write_file(&rle_id, sizeof(rle_id), 1, func_def->file))
+            return 0;
+
+        return -different - 1; 
+    }
+
+    return 0;
+}
+
 static bool write_mapped_rle(tga_image *tga, byte *palette_data, byte *color_data, int palette_size, tga_func_def *func_def)
 {
     if (func_def->write_file(palette_data, sizeof(byte), palette_size, func_def->file) != palette_size)
         return false;
 
-    int duplicates = 0;
-    int different = 0;
+    int size = tga->width * tga->height;
 
-    for (unsigned int i = 0; i < tga->height; i++)
+    for (int i = 0, n; i < size; i += n)
     {
-        for (unsigned int j = 0; j < tga->width; j++)
+        if (!(n = write_rle(tga, color_data, sizeof(byte), i, func_def)))
+            return false;
+
+        if (n > 0)
         {
-            int index = i * tga->width + j;
-
-            // Count duplicate pixels
-            if (!different)
-            {
-                if (j + 1 < tga->width && color_data[index] == color_data[index + 1])
-                {
-                    // A packet cannot contain more than 128 pixels
-                    if (duplicates + 1 < 128)
-                    {
-                        duplicates++;
-                        continue;
-                    }
-                }
-            }
-
-            // Write a run-length packet
-            if (duplicates)
-            {
-                byte rle_id = duplicates;
-                rle_id |= 1 << 7;
-
-                if (!func_def->write_file(&rle_id, sizeof(byte), 1, func_def->file))
-                    return false;
-
-                if (!func_def->write_file(&color_data[index], sizeof(byte), 1, func_def->file))
-                    return false;
-
-                duplicates = 0;
-                continue;
-            }
-
-            // Count different pixels
-            if (!duplicates)
-            {
-                // A packet cannot contain more than 128 pixels
-                if (different + 1 < 128 && j + 1 < tga->width)
-                {
-                    if (color_data[index] != color_data[index + 1])
-                    {
-                        different++;
-                        continue;
-                    }
-                    else
-                    {
-                        different--;
-                        j--;
-                        index--;
-                    }
-                }
-            }
-
-            // Write a raw packet
-            byte rle_id = different;
-
-            if (!func_def->write_file(&rle_id, sizeof(rle_id), 1, func_def->file))
+            if (!func_def->write_file(&color_data[i], sizeof(byte), 1, func_def->file))
                 return false;
+        }
+        else
+        {
+            n = -n;
 
-            if (func_def->write_file(&color_data[index - different], sizeof(byte), different + 1, func_def->file) != (different + 1))
+            if (func_def->write_file(&color_data[i], sizeof(byte), n, func_def->file) != n)
                 return false;
-
-            different = 0;
         }
     }
 
@@ -827,84 +846,31 @@ static bool write_mapped_rle(tga_image *tga, byte *palette_data, byte *color_dat
 
 static bool write_rgb_rle(tga_image *tga, int size, tga_func_def *func_def)
 {
-    int duplicates = 0;
-    int different = 0;
-
-    for (unsigned int i = 0; i < tga->height; i++)
+    for (int i = 0, n; i < size; i += n * tga->channels)
     {
-        for (unsigned int j = 0; j < tga->width; j++)
+        if (!(n = write_rle(tga, tga->data, tga->channels, i, func_def)))
+            return false;
+
+        if (n > 0)
         {
-            int index = (i * tga->width + j) * tga->channels;
+            byte color[4];
+            rgb_bgr_invert(&tga->data[i], &color[0], tga->channels);
 
-            // Count duplicate pixels
-            if (!different)
-            {
-                // A packet cannot contain more than 128 pixels
-                if (j + 1 < tga->width && duplicates + 1 < 128)
-                {
-                    if (memcmp(&tga->data[index], &tga->data[index + tga->channels], tga->channels) == 0)
-                    {
-                        duplicates++;
-                        continue;
-                    }
-                }
-            }
-
-            // Write a run-length packet
-            if (duplicates)
-            {
-                byte rle_id = duplicates;
-                rle_id |= 1 << 7;
-
-                byte colors[4];
-                rgb_bgr_invert(&tga->data[index], &colors[0], tga->channels);
-
-                if (!func_def->write_file(&rle_id, sizeof(byte), 1, func_def->file))
-                    return false;
-
-                if (func_def->write_file(&colors, sizeof(byte), tga->channels, func_def->file) != tga->channels)
-                    return false;
-
-                duplicates = 0;
-                continue;
-            }
-
-            // Count different pixels
-            if (!duplicates)
-            {
-                // A packet cannot contain more than 128 pixels
-                if (different + 1 < 128 && j + 1 < tga->width)
-                {
-                    if (memcmp(&tga->data[index], &tga->data[index + tga->channels], tga->channels) != 0)
-                    {
-                        different++;
-                        continue;
-                    }
-                    else
-                    {
-                        different--;
-                        j--;
-                        index -= tga->channels;
-                    }
-                }
-            }
-
-            // Write a raw packet
-            byte rle_id = different;
-
-            if (!func_def->write_file(&rle_id, sizeof(rle_id), 1, func_def->file))
+            if (func_def->write_file(&color, sizeof(byte), tga->channels, func_def->file) != tga->channels)
                 return false;
+        }
+        else
+        {
+            n = -n;
 
-            for (int k = 0; k < different + 1; k++)
+            for (int j = 0; j < n; j++)
             {
-                byte colors[4];
-                rgb_bgr_invert(&tga->data[index - (different - k) * tga->channels], &colors[0], tga->channels);
+                byte color[4];
+                rgb_bgr_invert(&tga->data[i + j * tga->channels], &color[0], tga->channels);
 
-                if (func_def->write_file(&colors, sizeof(byte), tga->channels, func_def->file) != tga->channels)
+                if (func_def->write_file(&color, sizeof(byte), tga->channels, func_def->file) != tga->channels)
                     return false;
             }
-
-            different = 0;
         }
     }
 
@@ -913,84 +879,31 @@ static bool write_rgb_rle(tga_image *tga, int size, tga_func_def *func_def)
 
 static bool write_rgb16_rle(tga_image *tga, int size, tga_func_def *func_def)
 {
-    int duplicates = 0;
-    int different = 0;
-
-    for (unsigned int i = 0; i < tga->height; i++)
+    for (int i = 0, n; i < size; i += n * tga->channels)
     {
-        for (unsigned int j = 0; j < tga->width; j++)
+        if (!(n = write_rle(tga, tga->data, tga->channels, i, func_def)))
+            return false;
+
+        if (n > 0)
         {
-            int index = (i * tga->width + j) * tga->channels;
+            word pixel;
+            rgb_to_rgb16(&tga->data[i], &pixel, tga->channels);
 
-            // Count duplicate pixels
-            if (!different)
-            {
-                // A packet cannot contain more than 128 pixels
-                if (j + 1 < tga->width && duplicates + 1 < 128)
-                {
-                    if (memcmp(&tga->data[index], &tga->data[index + tga->channels], tga->channels) == 0)
-                    {
-                        duplicates++;
-                        continue;
-                    }
-                }
-            }
-
-            // Write a run-length packet
-            if (duplicates)
-            {
-                byte rle_id = duplicates;
-                rle_id |= 1 << 7;
-
-                word pixel;
-                rgb_to_rgb16(&tga->data[index], &pixel, tga->channels);
-
-                if (!func_def->write_file(&rle_id, sizeof(byte), 1, func_def->file))
-                    return false;
-
-                if (!func_def->write_file(&pixel, sizeof(word), 1, func_def->file))
-                    return false;
-
-                duplicates = 0;
-                continue;
-            }
-
-            // Count different pixels
-            if (!duplicates)
-            {
-                // A packet cannot contain more than 128 pixels
-                if (different + 1 < 128 && j + 1 < tga->width)
-                {
-                    if (memcmp(&tga->data[index], &tga->data[index + tga->channels], tga->channels) != 0)
-                    {
-                        different++;
-                        continue;
-                    }
-                    else
-                    {
-                        different--;
-                        j--;
-                        index -= tga->channels;
-                    }
-                }
-            }
-
-            // Write a raw packet
-            byte rle_id = different;
-
-            if (!func_def->write_file(&rle_id, sizeof(rle_id), 1, func_def->file))
+            if (!func_def->write_file(&pixel, sizeof(pixel), 1, func_def->file))
                 return false;
+        }
+        else
+        {
+            n = -n;
 
-            for (int k = 0; k < different + 1; k++)
+            for (int j = 0; j < n; j++)
             {
                 word pixel;
-                rgb_to_rgb16(&tga->data[index - (different - k) * tga->channels], &pixel, tga->channels);
+                rgb_to_rgb16(&tga->data[i + j * tga->channels], &pixel, tga->channels);
 
-                if (!func_def->write_file(&pixel, sizeof(word), 1, func_def->file))
+                if (!func_def->write_file(&pixel, sizeof(pixel), 1, func_def->file))
                     return false;
             }
-
-            different = 0;
         }
     }
 
@@ -1000,88 +913,35 @@ static bool write_rgb16_rle(tga_image *tga, int size, tga_func_def *func_def)
 static bool write_bw_rle(tga_image *tga, int size, int bits, tga_func_def *func_def)
 {
     int bytes = (bits == 16) ? sizeof(word) : sizeof(byte);
-    int bw_size = tga->width * tga->height;
-    byte *bw_data = (byte *)malloc(bw_size * bytes);
-    if (!bw_data)
-        return false;
 
-    int duplicates = 0;
-    int different = 0;
-
-    // Convert RGB image to BW image
-    for (int i = 0, j = 0; i < size; i += tga->channels, j += bytes)
-        rgb_to_bw(&tga->data[i], &bw_data[j], tga->channels, bytes);
-
-    for (unsigned int i = 0; i < tga->height; i++)
+    for (int i = 0, n; i < size; i += n * tga->channels)
     {
-        for (unsigned int j = 0; j < tga->width; j++)
+        if (!(n = write_rle(tga, tga->data, tga->channels, i, func_def)))
+            return false;
+
+        if (n > 0)
         {
-            int index = (i * tga->width + j) * bytes;
+            byte pixel;
+            rgb_to_bw(&tga->data[i], &pixel, tga->channels, bits);
 
-            // Count duplicate pixels
-            if (!different)
-            {
-                if (j + 1 < tga->width && memcmp(&bw_data[index], &bw_data[index + bytes], bytes) == 0)
-                {
-                    // A packet cannot contain more than 128 pixels
-                    if (duplicates + 1 < 128)
-                    {
-                        duplicates++;
-                        continue;
-                    }
-                }
-            }
-
-            // Write a run-length packet
-            if (duplicates)
-            {
-                byte rle_id = duplicates;
-                rle_id |= 1 << 7;
-
-                if (!func_def->write_file(&rle_id, sizeof(byte), 1, func_def->file))
-                    return false;
-
-                if (!func_def->write_file(&bw_data[index], bytes, 1, func_def->file))
-                    return false;
-
-                duplicates = 0;
-                continue;
-            }
-
-            // Count different pixels
-            if (!duplicates)
-            {
-                // A packet cannot contain more than 128 pixels
-                if (different + 1 < 128 && j + 1 < tga->width)
-                {
-                    if (memcmp(&bw_data[index], &bw_data[index + bytes], bytes) != 0)
-                    {
-                        different++;
-                        continue;
-                    }
-                    else
-                    {
-                        different--;
-                        j--;
-                        index -= bytes;
-                    }
-                }
-            }
-
-            // Write a raw packet
-            byte rle_id = different;
-
-            if (!func_def->write_file(&rle_id, sizeof(rle_id), 1, func_def->file))
+            if (!func_def->write_file(&pixel, bytes, 1, func_def->file))
                 return false;
+        }
+        else
+        {
+            n = -n;
 
-            if (func_def->write_file(&bw_data[index - different * bytes], bytes, different + 1, func_def->file) != (different + 1))
-                return false;
+            for (int j = 0; j < n; j++)
+            {
+                byte pixel;
+                rgb_to_bw(&tga->data[i + j * tga->channels], &pixel, tga->channels, bits);
 
-            different = 0;
+                if (!func_def->write_file(&pixel, bytes, 1, func_def->file))
+                    return false;
+            }
         }
     }
 
-    free(bw_data);
     return true;
 }
 
@@ -1155,15 +1015,15 @@ bool save_tga_ext(const char *filename, tga_image *tga, tga_type type, tga_func_
         bits = 8;
 
     byte header[18] = { 0, color_map_type, image_type,
-                      (unsigned char)first_entry_index % 256,
-                      (unsigned char)first_entry_index / 256,
-                      (unsigned char)color_map_length % 256,
-                      (unsigned char)color_map_length / 256,
+                      (byte)first_entry_index % 256,
+                      (byte)first_entry_index / 256,
+                      (byte)color_map_length % 256,
+                      (byte)color_map_length / 256,
                       color_map_entry_size, 0, 0, 0, 0,
-                      (unsigned char)(tga->width % 256),
-                      (unsigned char)(tga->width / 256),
-                      (unsigned char)(tga->height % 256),
-                      (unsigned char)(tga->height / 256),
+                      (byte)(tga->width % 256),
+                      (byte)(tga->width / 256),
+                      (byte)(tga->height % 256),
+                      (byte)(tga->height / 256),
                       bits, 0 };
 
     if (!func_def->write_file(header, sizeof(header), 1, func_def->file))
