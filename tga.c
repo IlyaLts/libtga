@@ -42,7 +42,7 @@ static void swap_byte(byte *a, byte *b)
     *b = temp;
 }
 
-static void rgb_bgr_invert(const byte *origin, byte *dest, int channels)
+static void rgb_to_bgr(const byte *origin, byte *dest, int channels)
 {
     // Do not reorder the following code below as the order is very important
 
@@ -61,7 +61,7 @@ static void rgb_to_rgb16(const byte *data, word *pixel, int channels)
     *pixel |= (data[0] >> 3) << 10;     // R
     *pixel |= (data[1] >> 3) << 5;      // G
     *pixel |= (data[2] >> 3);           // B
-    
+
     // Alpha
     if (channels == 4)
         *pixel |= data[3] ? 1 << 15 : 0 << 15;
@@ -138,7 +138,7 @@ void flip_tga_vertically(tga_image *tga)
     }
 }
 
-static void *fopen_wrapper(const char *filename, char const *mode, void *stream)
+static void *fopen_wrapper(const char *filename, char const *mode, const void *stream)
 {
     return fopen(filename, mode);
 }
@@ -146,16 +146,16 @@ static void *fopen_wrapper(const char *filename, char const *mode, void *stream)
 bool load_tga(const char *filename, tga_image *tga)
 {
     tga_func_def func_def;
-    
+
     func_def.open_file = fopen_wrapper;
     func_def.read_file = fread;
     func_def.seek_file = fseek;
     func_def.close_file = fclose;
-    
+
     return load_tga_ext(filename, tga, &func_def);
 }
 
-static bool read_mapped(tga_image *tga, byte **color_data, tga_func_def *func_def)
+static bool read_mapped(tga_image *tga, const byte **color_data, const tga_func_def *func_def)
 {
     int pixels = tga->width * tga->height;
 
@@ -167,12 +167,12 @@ static bool read_mapped(tga_image *tga, byte **color_data, tga_func_def *func_de
         return false;
 
     for (int i = pixels - 1; i >= 0; i--)
-        rgb_bgr_invert(&(*color_data)[tga->data[i] * tga->channels], &tga->data[i * tga->channels], tga->channels);
+        rgb_to_bgr(&(*color_data)[tga->data[i] * tga->channels], &tga->data[i * tga->channels], tga->channels);
 
     return true;
 }
 
-static bool read_rgb(tga_image *tga, tga_func_def *func_def)
+static bool read_rgb(tga_image *tga, const tga_func_def *func_def)
 {
     int pixels = tga->width * tga->height;
 
@@ -194,7 +194,7 @@ static bool read_rgb(tga_image *tga, tga_func_def *func_def)
     return true;
 }
 
-static bool read_rgb16(tga_image *tga, tga_func_def *func_def)
+static bool read_rgb16(tga_image *tga, const tga_func_def *func_def)
 {
     int pixels = tga->width * tga->height;
 
@@ -211,7 +211,7 @@ static bool read_rgb16(tga_image *tga, tga_func_def *func_def)
     return true;
 }
 
-static bool read_bw(tga_image *tga, tga_func_def *func_def)
+static bool read_bw(tga_image *tga, const tga_func_def *func_def)
 {
     int bytes = tga->channels == 4 ? sizeof(word) : sizeof(byte);
     int pixels = tga->width * tga->height;
@@ -229,7 +229,7 @@ static bool read_bw(tga_image *tga, tga_func_def *func_def)
     return true;
 }
 
-static bool read_mapped_rle(tga_image *tga, byte **color_data, tga_func_def *func_def)
+static bool read_mapped_rle(tga_image *tga, const byte **color_data, const tga_func_def *func_def)
 {
     int pixels = tga->width * tga->height;
     int data_size = pixels * tga->channels;
@@ -255,7 +255,7 @@ static bool read_mapped_rle(tga_image *tga, byte **color_data, tga_func_def *fun
 
             while (rle_id)
             {
-                rgb_bgr_invert(&(*color_data)[tga->data[index_to_temp] * tga->channels], &tga->data[i * tga->channels], tga->channels);
+                rgb_to_bgr(&(*color_data)[tga->data[index_to_temp] * tga->channels], &tga->data[i * tga->channels], tga->channels);
 
                 i++;
                 rle_id--;
@@ -270,7 +270,7 @@ static bool read_mapped_rle(tga_image *tga, byte **color_data, tga_func_def *fun
 
             for (int j = 0; j < rle_id; j++)
             {
-                rgb_bgr_invert(&(*color_data)[tga->data[index_to_temp] * tga->channels], &tga->data[(i + j) * tga->channels], tga->channels);
+                rgb_to_bgr(&(*color_data)[tga->data[index_to_temp] * tga->channels], &tga->data[(i + j) * tga->channels], tga->channels);
                 index_to_temp += sizeof(byte);
             }
 
@@ -286,7 +286,7 @@ static bool read_mapped_rle(tga_image *tga, byte **color_data, tga_func_def *fun
     return true;
 }
 
-static bool read_rgb_rle(tga_image *tga, tga_func_def *func_def)
+static bool read_rgb_rle(tga_image *tga, const tga_func_def *func_def)
 {
     int data_size = tga->width * tga->height * tga->channels;
     int rle_size = data_size + tga->width * tga->height;
@@ -311,7 +311,7 @@ static bool read_rgb_rle(tga_image *tga, tga_func_def *func_def)
 
             while (rle_id)
             {
-                rgb_bgr_invert(&tga->data[index_to_temp], &tga->data[i * tga->channels], tga->channels);
+                rgb_to_bgr(&tga->data[index_to_temp], &tga->data[i * tga->channels], tga->channels);
 
                 i++;
                 rle_id--;
@@ -347,7 +347,7 @@ static bool read_rgb_rle(tga_image *tga, tga_func_def *func_def)
     return true;
 }
 
-static bool read_rgb16_rle(tga_image *tga, tga_func_def *func_def)
+static bool read_rgb16_rle(tga_image *tga, const tga_func_def *func_def)
 {
     int pixels = tga->width * tga->height;
     int data_size = pixels * tga->channels;
@@ -403,7 +403,7 @@ static bool read_rgb16_rle(tga_image *tga, tga_func_def *func_def)
     return true;
 }
 
-static bool read_bw_rle(tga_image *tga, tga_func_def *func_def)
+static bool read_bw_rle(tga_image *tga, const tga_func_def *func_def)
 {
     int bytes = tga->channels == 4 ? sizeof(word) : sizeof(byte);
     int pixels = tga->width * tga->height;
@@ -627,7 +627,7 @@ void free_tga(tga_image *tga)
     memset(tga, 0, sizeof(tga_image));
 }
 
-bool save_tga(const char *filename, tga_image *tga, tga_type type)
+bool save_tga(const char *filename, tga_image *tga, const tga_type type)
 {
     tga_func_def func_def;
 
@@ -638,7 +638,7 @@ bool save_tga(const char *filename, tga_image *tga, tga_type type)
     return save_tga_ext(filename, tga, type, &func_def);
 }
 
-static int generate_palette(tga_image *tga, int size, byte **palette_data, byte **color_data, tga_func_def *func_def)
+static int generate_palette(const tga_image *tga, int size, byte **palette_data, byte **color_data, const tga_func_def *func_def)
 {
     int palette_size = 0;
 
@@ -691,64 +691,77 @@ static int generate_palette(tga_image *tga, int size, byte **palette_data, byte 
     return palette_size;
 }
 
-static bool write_mapped(tga_image *tga, byte *palette_data, byte *color_data, int palette_size, tga_func_def *func_def)
+static bool write_mapped(const tga_image *tga, const byte *palette_data, const byte *color_data, int palette_size, const tga_func_def *func_def)
 {
     size_t pixels = tga->width * tga->height;
 
-    if (func_def->write_file(palette_data, sizeof(byte), palette_size, func_def->file) != palette_size)
+    if (func_def->write_file((byte *)palette_data, sizeof(byte), palette_size, func_def->file) != palette_size)
         return false;
 
-    if (func_def->write_file(color_data, sizeof(byte), pixels, func_def->file) != pixels)
+    if (func_def->write_file((byte *)color_data, sizeof(byte), pixels, func_def->file) != pixels)
         return false;
 
     return true;
 }
 
-static bool write_rgb(tga_image *tga, int size, tga_func_def *func_def)
+static bool write_rgb(const tga_image *tga, int size, const tga_func_def *func_def)
 {
+    bool success = true;
+
+    byte *data = (byte *)malloc(size);
+    if (!data)
+        return false;
+
     for (int i = 0; i < size; i += tga->channels)
-    {
-        byte colors[4];
-        rgb_bgr_invert(&tga->data[i], &colors[0], tga->channels);
+        rgb_to_bgr(&tga->data[i], &data[i], tga->channels);
 
-        if (func_def->write_file(colors, sizeof(byte), tga->channels, func_def->file) != tga->channels)
-            return false;
-    }
+    if (func_def->write_file(data, sizeof(byte), size, func_def->file) != size)
+        success = false;
 
-    return true;
+    free(data);
+    return success;
 }
 
-static bool write_rgb16(tga_image *tga, int size, tga_func_def *func_def)
+static bool write_rgb16(const tga_image *tga, int size, const tga_func_def *func_def)
 {
-    for (int i = 0; i < size; i += tga->channels)
-    {
-        word pixel;
-        rgb_to_rgb16(&tga->data[i], &pixel, tga->channels);
+    bool success = true;
+    int image_size = tga->width * tga->height;
 
-        if (!func_def->write_file(&pixel, sizeof(word), 1, func_def->file))
-            return false;
-    }
+    word *data = (word *)malloc(image_size * sizeof(word));
+    if (!data)
+        return false;
 
-    return true;
+    for (int i = 0, j = 0; i < size; i += tga->channels, j++)
+        rgb_to_rgb16(&tga->data[i], &data[j], tga->channels);
+
+    if (func_def->write_file(data, sizeof(word), image_size, func_def->file) != image_size)
+        success = false;
+
+    free(data);
+    return success;
 }
 
-static bool write_bw(tga_image *tga, int size, int bits, tga_func_def *func_def)
+static bool write_bw(const tga_image *tga, int size, int bits, const tga_func_def *func_def)
 {
+    bool success = true;
+    int image_size = tga->width * tga->height;
     int bytes = (bits == 16) ? sizeof(word) : sizeof(byte);
 
-    for (int i = 0; i < size; i += tga->channels)
-    {
-        byte pixel[2];
-        rgb_to_bw(&tga->data[i], (byte *)&pixel, tga->channels, bytes);
+    byte *data = (byte *)malloc(image_size * sizeof(word));
+    if (!data)
+        return false;
 
-        if (!func_def->write_file(&pixel[0], bytes, 1, func_def->file))
-            return false;
-    }
+    for (int i = 0, j = 0; i < size; i += tga->channels, j += bytes)
+        rgb_to_bw(&tga->data[i], &data[j], tga->channels, bytes);
 
-    return true;
+    if (func_def->write_file(data, sizeof(byte), image_size * bytes, func_def->file) != image_size * bytes)
+        success = false;
+
+    free(data);
+    return success;
 }
 
-static int write_rle(tga_image *tga, byte *data, int channels, int index, tga_func_def *func_def)
+static int write_rle(const tga_image *tga, const byte *data, int channels, int index, byte *rle)
 {
     int duplicates = 0;
     int different = 0;
@@ -775,13 +788,9 @@ static int write_rle(tga_image *tga, byte *data, int channels, int index, tga_fu
         // Write a run-length packet
         if (duplicates)
         {
-            byte rle_id = duplicates;
-            rle_id |= 1 << 7;
-
-            if (!func_def->write_file(&rle_id, sizeof(rle_id), 1, func_def->file))
-                return 0;
-
-            return rle_id - 127;
+            (*rle) = duplicates;
+            (*rle) |= 1 << 7;
+            return (*rle) - 127;
         }
 
         // Count different pixels
@@ -804,60 +813,80 @@ static int write_rle(tga_image *tga, byte *data, int channels, int index, tga_fu
         }
 
         // Write a raw packet
-        byte rle_id = different;
-
-        if (!func_def->write_file(&rle_id, sizeof(rle_id), 1, func_def->file))
-            return 0;
-
-        return -different - 1; 
+        (*rle) = different;
+        return -(*rle) - 1;
     }
 
     return 0;
 }
 
-static bool write_mapped_rle(tga_image *tga, byte *palette_data, byte *color_data, int palette_size, tga_func_def *func_def)
+static bool write_mapped_rle(tga_image *tga, const byte *palette_data, const byte *color_data, int palette_size, const tga_func_def *func_def)
 {
-    if (func_def->write_file(palette_data, sizeof(byte), palette_size, func_def->file) != palette_size)
+    if (func_def->write_file((byte *)palette_data, sizeof(byte), palette_size, func_def->file) != palette_size)
         return false;
 
+    bool success = true;
+    int data_size = 0;
     int size = tga->width * tga->height;
+
+    byte *data = (byte *)malloc(size * 2);
+    if (!data)
+        return false;
 
     for (int i = 0, n; i < size; i += n)
     {
-        if (!(n = write_rle(tga, color_data, sizeof(byte), i, func_def)))
+        if (!(n = write_rle(tga, color_data, sizeof(byte), i, &data[data_size])))
+        {
+            free(data);
             return false;
+        }
+
+        data_size++;
 
         if (n > 0)
         {
-            if (!func_def->write_file(&color_data[i], sizeof(byte), 1, func_def->file))
-                return false;
+            data[data_size] = color_data[i];
+            data_size++;
         }
         else
         {
             n = -n;
 
-            if (func_def->write_file(&color_data[i], sizeof(byte), n, func_def->file) != n)
-                return false;
+            memcpy(&data[data_size], &color_data[i], n);
+            data_size += n;
         }
     }
 
-    return true;
+    if (func_def->write_file(data, sizeof(byte), data_size, func_def->file) != data_size)
+        success = false;
+
+    free(data);
+    return success;
 }
 
-static bool write_rgb_rle(tga_image *tga, int size, tga_func_def *func_def)
+static bool write_rgb_rle(const tga_image *tga, int size, const tga_func_def *func_def)
 {
+    bool success = true;
+    int data_size = 0;
+
+    byte *data = (byte *)malloc(size + tga->width * tga->height);
+    if (!data)
+        return false;
+
     for (int i = 0, n; i < size; i += n * tga->channels)
     {
-        if (!(n = write_rle(tga, tga->data, tga->channels, i, func_def)))
+        if (!(n = write_rle(tga, tga->data, tga->channels, i, &data[data_size])))
+        {
+            free(data);
             return false;
+        }
+
+        data_size++;
 
         if (n > 0)
         {
-            byte color[4];
-            rgb_bgr_invert(&tga->data[i], &color[0], tga->channels);
-
-            if (func_def->write_file(&color, sizeof(byte), tga->channels, func_def->file) != tga->channels)
-                return false;
+            rgb_to_bgr(&tga->data[i], &data[data_size], tga->channels);
+            data_size += tga->channels;
         }
         else
         {
@@ -865,32 +894,42 @@ static bool write_rgb_rle(tga_image *tga, int size, tga_func_def *func_def)
 
             for (int j = 0; j < n; j++)
             {
-                byte color[4];
-                rgb_bgr_invert(&tga->data[i + j * tga->channels], &color[0], tga->channels);
-
-                if (func_def->write_file(&color, sizeof(byte), tga->channels, func_def->file) != tga->channels)
-                    return false;
+                rgb_to_bgr(&tga->data[i + j * tga->channels], &data[data_size], tga->channels);
+                data_size += tga->channels;
             }
         }
     }
 
-    return true;
+    if (func_def->write_file(data, sizeof(byte), data_size, func_def->file) != data_size)
+        success = false;
+
+    free(data);
+    return success;
 }
 
-static bool write_rgb16_rle(tga_image *tga, int size, tga_func_def *func_def)
+static bool write_rgb16_rle(const tga_image *tga, int size, const tga_func_def *func_def)
 {
+    bool success = true;
+    int data_size = 0;
+
+    byte *data = (byte *)malloc(tga->width * tga->height * sizeof(word) + tga->width * tga->height);
+    if (!data)
+        return false;
+
     for (int i = 0, n; i < size; i += n * tga->channels)
     {
-        if (!(n = write_rle(tga, tga->data, tga->channels, i, func_def)))
+        if (!(n = write_rle(tga, tga->data, tga->channels, i, &data[data_size])))
+        {
+            free(data);
             return false;
+        }
+
+        data_size++;
 
         if (n > 0)
         {
-            word pixel;
-            rgb_to_rgb16(&tga->data[i], &pixel, tga->channels);
-
-            if (!func_def->write_file(&pixel, sizeof(pixel), 1, func_def->file))
-                return false;
+            rgb_to_rgb16(&tga->data[i], (word *)&data[data_size], tga->channels);
+            data_size += sizeof(word);
         }
         else
         {
@@ -898,34 +937,43 @@ static bool write_rgb16_rle(tga_image *tga, int size, tga_func_def *func_def)
 
             for (int j = 0; j < n; j++)
             {
-                word pixel;
-                rgb_to_rgb16(&tga->data[i + j * tga->channels], &pixel, tga->channels);
-
-                if (!func_def->write_file(&pixel, sizeof(pixel), 1, func_def->file))
-                    return false;
+                rgb_to_rgb16(&tga->data[i + j * tga->channels], (word *)&data[data_size], tga->channels);
+                data_size += sizeof(word);
             }
         }
     }
 
-    return true;
+    if (func_def->write_file(data, sizeof(byte), data_size, func_def->file) != data_size)
+        success = false;
+
+    free(data);
+    return success;
 }
 
-static bool write_bw_rle(tga_image *tga, int size, int bits, tga_func_def *func_def)
+static bool write_bw_rle(const tga_image *tga, int size, int bits, const tga_func_def *func_def)
 {
+    bool success = true;
     int bytes = (bits == 16) ? sizeof(word) : sizeof(byte);
+    int data_size = 0;
+
+    byte *data = (byte *)malloc(tga->width * tga->height * bytes + tga->width * tga->height);
+    if (!data)
+        return false;
 
     for (int i = 0, n; i < size; i += n * tga->channels)
     {
-        if (!(n = write_rle(tga, tga->data, tga->channels, i, func_def)))
+        if (!(n = write_rle(tga, tga->data, tga->channels, i, &data[data_size])))
+        {
+            free(data);
             return false;
+        }
+
+        data_size++;
 
         if (n > 0)
         {
-            byte pixel;
-            rgb_to_bw(&tga->data[i], &pixel, tga->channels, bits);
-
-            if (!func_def->write_file(&pixel, bytes, 1, func_def->file))
-                return false;
+            rgb_to_bw(&tga->data[i], &data[data_size], tga->channels, bytes);
+            data_size += bytes;
         }
         else
         {
@@ -933,16 +981,17 @@ static bool write_bw_rle(tga_image *tga, int size, int bits, tga_func_def *func_
 
             for (int j = 0; j < n; j++)
             {
-                byte pixel;
-                rgb_to_bw(&tga->data[i + j * tga->channels], &pixel, tga->channels, bits);
-
-                if (!func_def->write_file(&pixel, bytes, 1, func_def->file))
-                    return false;
+                rgb_to_bw(&tga->data[i + j * tga->channels], &data[data_size], tga->channels, bytes);
+                data_size += bytes;
             }
         }
     }
 
-    return true;
+    if (func_def->write_file(data, sizeof(byte), data_size, func_def->file) != data_size)
+        success = false;
+
+    free(data);
+    return success;
 }
 
 bool save_tga_ext(const char *filename, tga_image *tga, tga_type type, tga_func_def *func_def)
