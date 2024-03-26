@@ -35,6 +35,12 @@
 #define TGA_TYPE_RGB_RLE        10
 #define TGA_TYPE_BW_RLE         11
 
+#if defined(_WIN64) || defined(_WIN32)
+#include <locale.h>
+
+static char *saved_locale;
+#endif
+
 static void swap_byte(byte *a, byte *b)
 {
     byte temp = *a;
@@ -613,6 +619,15 @@ bool load_tga_ext(const char *filename, tga_image *tga, tga_func_def *func_def)
     if (image_type == TGA_TYPE_MAPPED || image_type == TGA_TYPE_MAPPED_RLE)
         free(color_data);
 
+#if defined(_WIN64) || defined(_WIN32)
+    if (saved_locale)
+    {
+        setlocale(LC_ALL, saved_locale);
+        free(saved_locale);
+        saved_locale = NULL;
+    }
+#endif
+
     return success;
 }
 
@@ -1104,6 +1119,82 @@ bool save_tga_ext(const char *filename, tga_image *tga, tga_type type, tga_func_
         free(color_data);
     }
 
+#if defined(_WIN64) || defined(_WIN32)
+    if (saved_locale)
+    {
+        setlocale(LC_ALL, saved_locale);
+        free(saved_locale);
+        saved_locale = NULL;
+    }
+#endif
+
     func_def->close_file(func_def->file);
     return success;
 }
+
+#if defined(_WIN64) || defined(_WIN32)
+static void *wfopen_wrapper(const char *filename, const char *mode, const void *stream)
+{
+    size_t size = strlen(filename) + 1;
+
+    wchar_t wfilename[512];
+    size_t num_of_characters;
+    mbstowcs_s(&num_of_characters, wfilename, size, filename, size - 1);
+
+    wchar_t wmode[64];
+    size_t num_of_characters2;
+    mbstowcs_s(&num_of_characters2, wmode, size, mode, size - 1);
+
+    return _wfopen(wfilename, wmode);
+}
+
+bool wload_tga(const wchar_t *filename, tga_image *tga)
+{
+    tga_func_def func_def;
+
+    func_def.open_file = wfopen_wrapper;
+    func_def.read_file = fread;
+    func_def.seek_file = fseek;
+    func_def.close_file = fclose;
+
+    return wload_tga_ext(filename, tga, &func_def);
+}
+
+bool wload_tga_ext(const wchar_t *filename, tga_image *tga, tga_func_def *func_def)
+{
+    saved_locale = setlocale(LC_ALL, NULL);
+    saved_locale = _strdup(saved_locale);
+    setlocale(LC_ALL, ".UTF8");
+
+    char buf[1024];
+    size_t num_of_characters;
+    wcstombs_s(&num_of_characters, buf, sizeof(buf), filename, sizeof(buf));
+
+    return load_tga_ext(buf, tga, func_def);
+}
+
+bool wsave_tga(const wchar_t *filename, tga_image *tga, tga_type type)
+{
+    tga_func_def func_def;
+
+    func_def.open_file = wfopen_wrapper;
+    func_def.write_file = fwrite;
+    func_def.close_file = fclose;
+
+    return wsave_tga_ext(filename, tga, type, &func_def);
+}
+
+bool wsave_tga_ext(const wchar_t *filename, tga_image *tga, tga_type type, tga_func_def *func_def)
+{
+	saved_locale = setlocale(LC_ALL, NULL);
+    saved_locale = _strdup(saved_locale);
+    setlocale(LC_ALL, ".UTF8");
+	
+    char buf[1024];
+    size_t num_of_characters;
+    wcstombs_s(&num_of_characters, buf, sizeof(buf), filename, sizeof(buf));
+
+    return save_tga_ext(buf, tga, type, func_def);
+}
+
+#endif

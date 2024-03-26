@@ -61,7 +61,7 @@ typedef struct
     unsigned char *data;
 } tga_image;
 
-typedef void *(*open_file_func) (const char *filename, char const *mode, void *stream);
+typedef void *(*open_file_func) (const char *filename, const char *mode, void *stream);
 typedef size_t(*read_file_func) (void *buffer, size_t size, size_t count, void *stream);
 typedef size_t(*write_file_func) (void *buffer, size_t size, size_t count, void *stream);
 typedef long(*seek_file_func) (void *stream, long offset, int origin);
@@ -85,6 +85,13 @@ extern bool load_tga_ext(const char *filename, tga_image *tga, tga_func_def *fun
 extern void free_tga(tga_image *tga);
 extern bool save_tga(const char *filename, tga_image *tga, tga_type type);
 extern bool save_tga_ext(const char *filename, tga_image *tga, tga_type type, tga_func_def *func_def);
+
+#if defined(_WIN64) || defined(_WIN32)
+extern bool wload_tga(const wchar_t *filename, tga_image *tga);
+extern bool wload_tga_ext(const wchar_t *filename, tga_image *tga, tga_func_def *func_def);
+extern bool wsave_tga(const wchar_t *filename, tga_image *tga, tga_type type);
+extern bool wsave_tga_ext(const wchar_t *filename, tga_image *tga, tga_type type, tga_func_def *func_def);
+#endif
 
 #ifdef __cplusplus
 }
