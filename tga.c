@@ -284,10 +284,11 @@ static bool read_mapped_rle(tga_image *tga, const byte **color_data, const tga_f
         }
     }
 
-    tga->data = realloc(tga->data, data_size);
-
-    if (!tga->data)
-        return false;
+    char *tmp = realloc(tga->data, data_size);
+    if (tmp)
+    {
+        tga->data = tmp;
+    }
 
     return true;
 }
@@ -346,9 +347,11 @@ static bool read_rgb_rle(tga_image *tga, const tga_func_def *func_def)
         }
     }
 
-    tga->data = realloc(tga->data, data_size);
-    if (!tga->data)
-        return false;
+    char *tmp = realloc(tga->data, data_size);
+    if (tmp)
+    {
+        tga->data = tmp;
+    }
 
     return true;
 }
@@ -402,9 +405,11 @@ static bool read_rgb16_rle(tga_image *tga, const tga_func_def *func_def)
         }
     }
 
-    tga->data = realloc(tga->data, data_size);
-    if (!tga->data)
-        return false;
+    char *tmp = realloc(tga->data, data_size);
+    if (tmp)
+    {
+        tga->data = tmp;
+    }
 
     return true;
 }
@@ -459,9 +464,11 @@ static bool read_bw_rle(tga_image *tga, const tga_func_def *func_def)
         }
     }
 
-    tga->data = realloc(tga->data, data_size);
-    if (!tga->data)
-        return false;
+    char *tmp = realloc(tga->data, data_size);
+    if (tmp)
+    {
+        tga->data = tmp;
+    }
 
     return true;
 }
@@ -786,7 +793,7 @@ static int write_rle(const tga_image *tga, const byte *data, int channels, int i
 
     for (unsigned int j = index; j < end_row; j += channels)
     {
-        // Count duplicate pixels
+        // Duplicate pixels
         if (!different)
         {
             if (j + channels < end_row && memcmp(&data[j], &data[j + channels], channels) == 0)
@@ -798,32 +805,27 @@ static int write_rle(const tga_image *tga, const byte *data, int channels, int i
                     continue;
                 }
             }
-        }
 
-        // Write a run-length packet
-        if (duplicates)
-        {
-            (*rle) = duplicates;
-            (*rle) |= 1 << 7;
-            return (*rle) - 127;
-        }
-
-        // Count different pixels
-        if (!duplicates)
-        {
-            // A packet cannot contain more than 128 pixels
-            if (different + 1 < 128 && j + channels < end_row)
+            // Write a run-length packet
+            if (duplicates)
             {
-                if (memcmp(&data[j], &data[j + channels], channels) != 0)
-                {
-                    different++;
-                    continue;
-                }
-                else
-                {
-                    different--;
-                    j -= channels;
-                }
+                (*rle) = duplicates;
+                (*rle) |= 1 << 7;
+                return (*rle) - 127;
+            }
+        }
+
+        // A packet cannot contain more than 128 pixels
+        if (different + 1 < 128 && j + channels < end_row)
+        {
+            if (memcmp(&data[j], &data[j + channels], channels) != 0)
+            {
+                different++;
+                continue;
+            }
+            else
+            {
+                different--;
             }
         }
 
@@ -1168,7 +1170,7 @@ bool wload_tga_ext(const wchar_t *filename, tga_image *tga, tga_func_def *func_d
 
     char buf[1024];
     size_t num_of_characters;
-    wcstombs_s(&num_of_characters, buf, sizeof(buf), filename, sizeof(buf));
+    wcstombs_s(&num_of_characters, buf, sizeof(buf), filename, sizeof(buf) - 1);
 
     return load_tga_ext(buf, tga, func_def);
 }
@@ -1186,13 +1188,13 @@ bool wsave_tga(const wchar_t *filename, tga_image *tga, tga_type type)
 
 bool wsave_tga_ext(const wchar_t *filename, tga_image *tga, tga_type type, tga_func_def *func_def)
 {
-	saved_locale = setlocale(LC_ALL, NULL);
+    saved_locale = setlocale(LC_ALL, NULL);
     saved_locale = _strdup(saved_locale);
     setlocale(LC_ALL, ".UTF8");
-	
+    
     char buf[1024];
     size_t num_of_characters;
-    wcstombs_s(&num_of_characters, buf, sizeof(buf), filename, sizeof(buf));
+    wcstombs_s(&num_of_characters, buf, sizeof(buf), filename, sizeof(buf) - 1);
 
     return save_tga_ext(buf, tga, type, func_def);
 }
