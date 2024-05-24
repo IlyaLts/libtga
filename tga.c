@@ -604,7 +604,7 @@ bool load_tga_ext(const char *filename, tga_image *tga, tga_func_def *func_def)
     // Run-length encoded black and white image
     else if (image_type == TGA_TYPE_BW_RLE)
     {
-        if (bits_per_pixel == 16)
+        if (bits_per_pixel == 16 || bits_per_pixel == 8)
             success = read_bw_rle(tga, func_def);
     }
 
