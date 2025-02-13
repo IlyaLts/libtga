@@ -90,10 +90,13 @@ static void rgb_to_bw(const byte *data, byte *pixel, int channels, int pixel_siz
     pixel[0] = (data[0] + data[1] + data[2]) / 3;
 
     // Alpha
-    if (channels == 4)
-        pixel[1] = data[3];
-    else if (pixel_size == 2)
-        pixel[1] = 255;
+    if (pixel_size == 2)
+    {
+        if (channels == 4)
+            pixel[1] = data[3];
+        else
+            pixel[1] = 255;
+    }
 }
 
 static void bw_to_rgb(const byte *pixel, byte *data, int channels)
