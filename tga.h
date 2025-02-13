@@ -36,9 +36,6 @@
 extern "C" {
 #endif
 
-typedef unsigned char byte;
-typedef short word;
-
 typedef enum
 {
     TGA_MAPPED,
