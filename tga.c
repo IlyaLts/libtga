@@ -1006,7 +1006,7 @@ static bool write_bw_rle(const tga_image *tga, int size, int bits, const tga_fun
 
 bool save_tga_ext(const char *filename, tga_image *tga, tga_type type, tga_func_def *func_def)
 {
-    if (!filename || !tga || !tga->data)
+    if (!filename || !tga || !tga->data || !func_def)
         return false;
 
     byte image_type;
