@@ -1075,10 +1075,10 @@ bool save_tga_ext(const char *filename, tga_image *tga, tga_type type, tga_func_
         bits = 8;
 
     uint8_t header[18] = { 0, color_map_type, image_type,
-                      (uint8_t)first_entry_index % 256,
-                      (uint8_t)first_entry_index / 256,
-                      (uint8_t)color_map_length % 256,
-                      (uint8_t)color_map_length / 256,
+                      (uint8_t)(first_entry_index % 256),
+                      (uint8_t)(first_entry_index / 256),
+                      (uint8_t)(color_map_length % 256),
+                      (uint8_t)(color_map_length / 256),
                       color_map_entry_size, 0, 0, 0, 0,
                       (uint8_t)(tga->width % 256),
                       (uint8_t)(tga->width / 256),
