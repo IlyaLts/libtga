@@ -759,7 +759,7 @@ static bool write_bw(const tga_image *tga, int size, int bits, const tga_func_de
     int image_size = tga->width * tga->height;
     int bytes = (bits == 16) ? sizeof(word) : sizeof(byte);
 
-    byte *data = (byte *)malloc(image_size * sizeof(word));
+    byte *data = (byte *)malloc(image_size * bytes);
     if (!data)
         return false;
 
