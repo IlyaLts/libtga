@@ -38,7 +38,6 @@
 
 #if defined(_WIN64) || defined(_WIN32)
 #include <locale.h>
-#include "wcharconv/wcharconv.h"
 #endif
 
 static void swap_byte(uint8_t *a, uint8_t *b)
@@ -1123,12 +1122,15 @@ bool save_tga_ext(const char *filename, tga_image *tga, tga_type type, tga_func_
 static void *wfopen_wrapper(const char *filename, const char *mode, const void *stream)
 {
     size_t size = strlen(filename) + 1;
+    _locale_t locale = _create_locale(LC_ALL, ".UTF8");
 
     wchar_t wfilename[512];
-    char_to_wchar(filename, wfilename, size);
+    size_t num_of_characters;
+    _mbstowcs_s_l(&num_of_characters, wfilename, size, filename, size - 1, locale);
 
     wchar_t wmode[64];
-    char_to_wchar(mode, wmode, size);
+    size_t num_of_characters2;
+    _mbstowcs_s_l(&num_of_characters2, wmode, size, mode, size - 1, locale);
 
     return _wfopen(wfilename, wmode);
 }
@@ -1148,7 +1150,9 @@ bool wload_tga(const wchar_t *filename, tga_image *tga)
 bool wload_tga_ext(const wchar_t *filename, tga_image *tga, tga_func_def *func_def)
 {
     char buf[1024];
-    wchar_to_char(filename, buf, sizeof(buf));
+    size_t num_of_characters;
+    _locale_t locale = _create_locale(LC_ALL, ".UTF8");
+    _wcstombs_s_l(&num_of_characters, buf, sizeof(buf), filename, sizeof(buf) - 1, locale);
 
     return load_tga_ext(buf, tga, func_def);
 }
@@ -1167,7 +1171,9 @@ bool wsave_tga(const wchar_t *filename, tga_image *tga, tga_type type)
 bool wsave_tga_ext(const wchar_t *filename, tga_image *tga, tga_type type, tga_func_def *func_def)
 {
     char buf[1024];
-    wchar_to_char(filename, buf, sizeof(buf));
+    size_t num_of_characters;
+    _locale_t locale = _create_locale(LC_ALL, ".UTF8");
+    _wcstombs_s_l(&num_of_characters, buf, sizeof(buf), filename, sizeof(buf) - 1, locale);
 
     return save_tga_ext(buf, tga, type, func_def);
 }
