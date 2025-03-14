@@ -65,8 +65,8 @@ int main()
 | wsave_tga(const wchar_t *filename, tga_image *ptga, tga_type type) | Saves a TGA image to the specified file in the specified format. |
 | wsave_tga_ext(const wchar_t *filename, tga_image *ptga, tga_type type, tga_func_def *func_def) | Saves a TGA image to the specified file in the specified format using the custom file functions specified in the tga_func_def structure. |
 
-### Notes
-Using ```save_tga``` and ```save_tga_ext``` with any mapped type argument will fail if the image has over 256 colors.
+> [!NOTE]
+> Using ```save_tga``` and ```save_tga_ext``` with any mapped type argument will fail if the image has over 256 colors.
 
 ## License
 
