@@ -1,6 +1,6 @@
 libtga
 ======
-A library for fast loading, saving, and manipulating Targa (.tga) image files in a variety of formats, including uncompressed, run-length encoded, color-mapped, 16-bit or 8-bit black-and-white, and 32-bit or 16-bit true-color images.
+A high-performance library for loading, saving, and manipulating Targa (.tga) image files in a variety of formats, including uncompressed, run-length encoded, color-mapped, 16-bit or 8-bit black-and-white, and 32-bit or 16-bit true-color images.
 
 ### Usage
 ```
