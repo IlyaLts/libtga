@@ -146,7 +146,7 @@ void flip_tga_vertically(tga_image *tga)
     }
 }
 
-static void *fopen_wrapper(const char *filename, char const *mode, const void *stream)
+static void *fopen_wrapper(const char *filename, char const *mode, void *stream)
 {
     return fopen(filename, mode);
 }
@@ -156,9 +156,9 @@ bool load_tga(const char *filename, tga_image *tga)
     tga_func_def func_def;
 
     func_def.open_file = fopen_wrapper;
-    func_def.read_file = fread;
-    func_def.seek_file = fseek;
-    func_def.close_file = fclose;
+    func_def.read_file = (read_file_func)fread;
+    func_def.seek_file = (seek_file_func)fseek;
+    func_def.close_file = (close_file_func)fclose;
 
     return load_tga_ext(filename, tga, &func_def);
 }
@@ -573,7 +573,7 @@ bool load_tga_ext(const char *filename, tga_image *tga, tga_func_def *func_def)
     if (image_type == TGA_TYPE_MAPPED)
     {
         if (bits_per_pixel == 8)
-            success = read_mapped(tga, &color_data, func_def);
+            success = read_mapped(tga, (const uint8_t **)&color_data, func_def);
     }
     // True-color image
     else if (image_type == TGA_TYPE_RGB)
@@ -593,7 +593,7 @@ bool load_tga_ext(const char *filename, tga_image *tga, tga_func_def *func_def)
     else if (image_type == TGA_TYPE_MAPPED_RLE)
     {
         if (bits_per_pixel == 8)
-            success = read_mapped_rle(tga, &color_data, func_def);
+            success = read_mapped_rle(tga, (const uint8_t **)&color_data, func_def);
     }
     // Run-length encoded true-color image
     else if (image_type == TGA_TYPE_RGB_RLE)
@@ -647,8 +647,8 @@ bool save_tga(const char *filename, tga_image *tga, const tga_type type)
     tga_func_def func_def;
 
     func_def.open_file = fopen_wrapper;
-    func_def.write_file = fwrite;
-    func_def.close_file = fclose;
+    func_def.write_file = (write_file_func)fwrite;
+    func_def.close_file = (close_file_func)fclose;
 
     return save_tga_ext(filename, tga, type, &func_def);
 }
