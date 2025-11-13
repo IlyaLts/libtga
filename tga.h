@@ -1,6 +1,6 @@
 /*
 ===============================================================================
-    Copyright (C) 2011-2023 Ilya Lyakhovets
+    Copyright (C) 2011-2025 Ilya Lyakhovets
 
     Permission is hereby granted, free of charge, to any person obtaining a copy
     of this software and associated documentation files (the "Software"), to deal
@@ -56,6 +56,8 @@ typedef struct
     unsigned int height;
     unsigned int channels;
     unsigned char *data;
+    bool vflip;
+    bool hflip;
 } tga_image;
 
 typedef void *(*open_file_func) (const char *filename, const char *mode, void *stream);

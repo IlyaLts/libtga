@@ -1,6 +1,6 @@
 /*
 ===============================================================================
-    Copyright (C) 2011-2023 Ilya Lyakhovets
+    Copyright (C) 2011-2025 Ilya Lyakhovets
 
     Permission is hereby granted, free of charge, to any person obtaining a copy
     of this software and associated documentation files (the "Software"), to deal
@@ -129,6 +129,8 @@ void flip_tga_horizontally(tga_image *tga)
             }
         }
     }
+
+    tga->hflip = !tga->hflip;
 }
 
 void flip_tga_vertically(tga_image *tga)
@@ -144,6 +146,8 @@ void flip_tga_vertically(tga_image *tga)
                       &tga->data[i + tga->width * tga->channels * (tga->height - j - 1)]);
         }
     }
+
+    tga->vflip = !tga->vflip;
 }
 
 static void *fopen_wrapper(const char *filename, char const *mode, void *stream)
@@ -490,6 +494,7 @@ bool load_tga_ext(const char *filename, tga_image *tga, tga_func_def *func_def)
     uint16_t width = 0;
     uint16_t height = 0;
     uint8_t bits_per_pixel = 0;
+    uint8_t imageDescriptor = 0;
 
     uint8_t *color_data = NULL;
     int color_channels = 0;
@@ -517,6 +522,7 @@ bool load_tga_ext(const char *filename, tga_image *tga, tga_func_def *func_def)
     width = (uint16_t)header[13] << 8 | (uint16_t)header[12];
     height = (uint16_t)header[15] << 8 | (uint16_t)header[14];
     bits_per_pixel = header[16];
+    imageDescriptor = header[17];
 
     // Skip optional image ID field
     if (id_length)
@@ -614,11 +620,8 @@ bool load_tga_ext(const char *filename, tga_image *tga, tga_func_def *func_def)
 
     if (success)
     {
-        if (x_origin)
-            flip_tga_horizontally(tga);
-
-        if (y_origin)
-            flip_tga_vertically(tga);
+        tga->vflip = imageDescriptor & 0x20;
+        tga->hflip = imageDescriptor & 0x10;
     }
     else
     {
@@ -1011,6 +1014,7 @@ bool save_tga_ext(const char *filename, tga_image *tga, tga_type type, tga_func_
 
     uint8_t image_type;
     uint8_t bits;
+    uint8_t imageDescriptor;
     int size = tga->width * tga->height * tga->channels;
     bool success = false;
 
@@ -1073,6 +1077,12 @@ bool save_tga_ext(const char *filename, tga_image *tga, tga_type type, tga_func_
     else if (type == TGA_BW8 || type == TGA_BW8_RLE)
         bits = 8;
 
+    if (tga->vflip)
+        imageDescriptor |= 0x20;
+
+    if (tga->hflip)
+        imageDescriptor |= 0x10;
+
     uint8_t header[18] = { 0, color_map_type, image_type,
                       (uint8_t)(first_entry_index % 256),
                       (uint8_t)(first_entry_index / 256),
@@ -1083,7 +1093,7 @@ bool save_tga_ext(const char *filename, tga_image *tga, tga_type type, tga_func_
                       (uint8_t)(tga->width / 256),
                       (uint8_t)(tga->height % 256),
                       (uint8_t)(tga->height / 256),
-                      bits, 0 };
+                      bits, imageDescriptor };
 
     if (!func_def->write_file(header, sizeof(header), 1, func_def->file))
     {
