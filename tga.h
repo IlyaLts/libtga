@@ -22,8 +22,8 @@
 ===============================================================================
 */
 
-#ifndef __TGA_H__
-#define __TGA_H__
+#ifndef TGA_H
+#define TGA_H
 
 #if defined(_WIN32) && (!(defined(_CRT_SECURE_NO_WARNINGS)))
 #define _CRT_SECURE_NO_WARNINGS
@@ -96,4 +96,4 @@ extern bool wsave_tga_ext(const wchar_t *filename, tga_image *tga, tga_type type
 }
 #endif
 
-#endif // !__TGA_H__
+#endif // !TGA_H

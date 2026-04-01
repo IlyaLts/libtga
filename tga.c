@@ -87,7 +87,7 @@ static void rgb16_to_rgb(const uint16_t *pixel, uint8_t *data, int channels)
 
 static void rgb_to_bw(const uint8_t *data, uint8_t *pixel, int channels, int pixel_size)
 {
-    pixel[0] = (data[0] + data[1] + data[2]) / 3;
+    pixel[0] = (uint8_t)(((unsigned int)data[0] + data[1] + data[2]) / 3);
 
     // Alpha
     if (pixel_size == 2)
@@ -176,7 +176,11 @@ static bool read_mapped(tga_image *tga, const uint8_t **color_data, const tga_fu
         return false;
 
     if (func_def->read_file(tga->data, sizeof(uint8_t), pixels, func_def->file) != pixels)
+    {
+        free(tga->data);
+        tga->data = NULL;
         return false;
+    }
 
     for (int i = pixels - 1; i >= 0; i--)
         rgb_to_bgr(&(*color_data)[tga->data[i] * tga->channels], &tga->data[i * tga->channels], tga->channels);
@@ -193,7 +197,11 @@ static bool read_rgb(tga_image *tga, const tga_func_def *func_def)
         return false;
 
     if (func_def->read_file(tga->data, sizeof(uint8_t), pixels * tga->channels, func_def->file) != (pixels * tga->channels))
+    {
+        free(tga->data);
+        tga->data = NULL;
         return false;
+    }
 
     for (unsigned int y = 0; y < tga->height; y++)
     {
@@ -215,7 +223,11 @@ static bool read_rgb16(tga_image *tga, const tga_func_def *func_def)
         return false;
 
     if (func_def->read_file(tga->data, sizeof(uint16_t), pixels, func_def->file) != pixels)
+    {
+        free(tga->data);
+        tga->data = NULL;
         return false;
+    }
 
     for (int i = pixels - 1; i >= 0; i--)
         rgb16_to_rgb((uint16_t *)&tga->data[i * sizeof(uint16_t)], &tga->data[i * tga->channels], tga->channels);
@@ -233,7 +245,11 @@ static bool read_bw(tga_image *tga, const tga_func_def *func_def)
         return false;
 
     if (func_def->read_file(tga->data, sizeof(uint8_t), pixels * bytes, func_def->file) != (pixels * bytes))
+    {
+        free(tga->data);
+        tga->data = NULL;
         return false;
+    }
 
     for (int i = pixels - 1; i >= 0; i--)
         bw_to_rgb(&tga->data[i * bytes], &tga->data[i * tga->channels], tga->channels);
@@ -253,7 +269,11 @@ static bool read_mapped_rle(tga_image *tga, const uint8_t **color_data, const tg
         return false;
 
     if (!func_def->read_file(&tga->data[index_to_temp], sizeof(uint8_t), rle_size, func_def->file))
+    {
+        free(tga->data);
+        tga->data = NULL;
         return false;
+    }
 
     for (unsigned int i = 0; i < tga->width * tga->height;)
     {
@@ -310,7 +330,11 @@ static bool read_rgb_rle(tga_image *tga, const tga_func_def *func_def)
         return false;
 
     if (!func_def->read_file(&tga->data[index_to_temp], sizeof(uint8_t), rle_size, func_def->file))
+    {
+        free(tga->data);
+        tga->data = NULL;
         return false;
+    }
 
     for (unsigned int i = 0; i < tga->width * tga->height;)
     {
@@ -374,7 +398,11 @@ static bool read_rgb16_rle(tga_image *tga, const tga_func_def *func_def)
         return false;
 
     if (!func_def->read_file(&tga->data[index_to_temp], sizeof(uint8_t), rle_size, func_def->file))
+    {
+        free(tga->data);
+        tga->data = NULL;
         return false;
+    }
 
     for (unsigned int i = 0; i < tga->width * tga->height;)
     {
@@ -433,7 +461,11 @@ static bool read_bw_rle(tga_image *tga, const tga_func_def *func_def)
         return false;
 
     if (!func_def->read_file(&tga->data[index_to_temp], sizeof(uint8_t), rle_size, func_def->file))
+    {
+        free(tga->data);
+        tga->data = NULL;
         return false;
+    }
 
     for (unsigned int i = 0; i < tga->width * tga->height;)
     {
@@ -505,7 +537,10 @@ bool load_tga_ext(const char *filename, tga_image *tga, tga_func_def *func_def)
         return false;
 
     if (!func_def->read_file(&header, sizeof(header), 1, func_def->file))
+    {
+        func_def->close_file(func_def->file);
         return false;
+    }
 
     image_type = header[2];
 
@@ -620,8 +655,8 @@ bool load_tga_ext(const char *filename, tga_image *tga, tga_func_def *func_def)
 
     if (success)
     {
-        tga->vflip = imageDescriptor & 0x20;
-        tga->hflip = imageDescriptor & 0x10;
+        tga->vflip = !!(imageDescriptor & 0x20);
+        tga->hflip = !!(imageDescriptor & 0x10);
     }
     else
     {
@@ -696,7 +731,6 @@ static int generate_palette(const tga_image *tga, int size, uint8_t **palette_da
             {
                 free(*palette_data);
                 free(*color_data);
-                func_def->close_file(func_def->file);
                 return 0;
             }
         }
@@ -1012,9 +1046,9 @@ bool save_tga_ext(const char *filename, tga_image *tga, tga_type type, tga_func_
     if (!filename || !tga || !tga->data || !func_def)
         return false;
 
-    uint8_t image_type;
-    uint8_t bits;
-    uint8_t imageDescriptor;
+    uint8_t image_type = TGA_TYPE_NO_IMAGE;
+    uint8_t bits = 0;
+    uint8_t imageDescriptor = 0;
     int size = tga->width * tga->height * tga->channels;
     bool success = false;
 
@@ -1097,6 +1131,11 @@ bool save_tga_ext(const char *filename, tga_image *tga, tga_type type, tga_func_
 
     if (!func_def->write_file(header, sizeof(header), 1, func_def->file))
     {
+        if (type == TGA_MAPPED || type == TGA_MAPPED_RLE)
+        {
+            free(palette_data);
+            free(color_data);
+        }
         func_def->close_file(func_def->file);
         return false;
     }
@@ -1131,17 +1170,17 @@ bool save_tga_ext(const char *filename, tga_image *tga, tga_type type, tga_func_
 #if defined(_WIN64) || defined(_WIN32)
 static void *wfopen_wrapper(const char *filename, const char *mode, const void *stream)
 {
-    size_t size = strlen(filename) + 1;
     _locale_t locale = _create_locale(LC_ALL, ".UTF8");
 
     wchar_t wfilename[512];
     size_t num_of_characters;
-    _mbstowcs_s_l(&num_of_characters, wfilename, size, filename, size - 1, locale);
+    _mbstowcs_s_l(&num_of_characters, wfilename, _countof(wfilename), filename, _TRUNCATE, locale);
 
     wchar_t wmode[64];
     size_t num_of_characters2;
-    _mbstowcs_s_l(&num_of_characters2, wmode, size, mode, size - 1, locale);
-
+    _mbstowcs_s_l(&num_of_characters2, wmode, _countof(wmode), mode, _TRUNCATE, locale);
+	
+	_free_locale(locale);
     return _wfopen(wfilename, wmode);
 }
 
@@ -1162,7 +1201,8 @@ bool wload_tga_ext(const wchar_t *filename, tga_image *tga, tga_func_def *func_d
     char buf[1024];
     size_t num_of_characters;
     _locale_t locale = _create_locale(LC_ALL, ".UTF8");
-    _wcstombs_s_l(&num_of_characters, buf, sizeof(buf), filename, sizeof(buf) - 1, locale);
+    _wcstombs_s_l(&num_of_characters, buf, sizeof(buf), filename, _TRUNCATE, locale);
+	_free_locale(locale);
 
     return load_tga_ext(buf, tga, func_def);
 }
@@ -1183,7 +1223,8 @@ bool wsave_tga_ext(const wchar_t *filename, tga_image *tga, tga_type type, tga_f
     char buf[1024];
     size_t num_of_characters;
     _locale_t locale = _create_locale(LC_ALL, ".UTF8");
-    _wcstombs_s_l(&num_of_characters, buf, sizeof(buf), filename, sizeof(buf) - 1, locale);
+    _wcstombs_s_l(&num_of_characters, buf, sizeof(buf), filename, _TRUNCATE, locale);
+	_free_locale(locale);
 
     return save_tga_ext(buf, tga, type, func_def);
 }
