@@ -2,8 +2,8 @@ libtga
 ======
 A high-performance library for loading, saving, and manipulating Targa (.tga) image files in a variety of formats, including uncompressed, run-length encoded, color-mapped, 16-bit or 8-bit black-and-white, and 32-bit or 16-bit true-color images.
 
-### Why this was created?
-Sometimes, in game development, loading speed is more important than having small texture sizes on the disk. Since the TGA format is very simple and closely resembles raw data, it allows us to load textures even faster compared to JPG or PNG. However, a poorly written loader can still slow everything down, as memory allocations and disk reads are expensive. So, this library pushes this to the absolute limit, by minimizing memory allocations and reducing disk reads to load textures as fast as possible. Additionally, this library is built to support any tga types that you could encountered on the internet.
+### Why This Was Created?
+Sometimes, in game development, loading speed is more important than having small texture sizes on the disk. Since the TGA format is very simple and closely resembles raw data, it allows us to load textures faster compared to JPG or PNG. However, a poorly written loader cannot load as fast as a good one due to heavy use of memory allocations and disk reads, which are expensive. So, this library pushes this to the absolute limit by minimizing memory allocations and reducing disk reads to load textures as fast as possible. Additionally, this library supports any TGA types that you might encounter online.
 
 ### Usage
 ```
